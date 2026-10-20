@@ -24,6 +24,10 @@ La interfaz toma como referencia la identidad visible en el Campus Virtual ofici
 
 No se publicó un enlace descargable al manual ni a sus archivos maestros durante esta investigación. Por eso esta versión no reproduce el escudo ni afirma usar la tipografía oficial: usa una adaptación visual basada en los recursos públicos actuales. Antes de distribuir una versión institucional, corresponde solicitar el manual y los archivos de marca a UNLaR.
 
+## Presentación del seminario
+
+El [borrador de presentación](docs/borrador-presentacion.md) propone una charla de 36 minutos con la demostración al final y reserva aproximadamente el 42% para explicar la implementación con código. Incluye el guion por diapositiva, fragmentos/archivos a mostrar y la secuencia para los dos Android.
+
 ## Ejecución
 
 Con Node.js instalado globalmente:
