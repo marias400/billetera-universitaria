@@ -374,6 +374,7 @@ Las firmas digitales protegen la integridad y la autoría de los datos, pero no 
 | Credencial revocada | Usar una constancia anulada. | Consulta de estado en cada verificación. |
 | Reutilización de una presentación | Reenviar una prueba válida. | Código aleatorio, destinatario, vencimiento y uso único. |
 | Robo o préstamo de billetera | Otra persona presenta credenciales ajenas. | Clave local protegida con PIN o passkey y vinculación de la presentación a la clave del titular. |
+| Robo del QR antes de la primera recepción | Otra persona reclama antes que el estudiante la credencial de prueba. | Límite conocido de la demo: el primer dispositivo que reclama vincula el titular ficticio. En una versión real, la entrega debe vincularse a identidad autenticada o a un alta previa del dispositivo. |
 | QR malicioso | Un atacante pide datos innecesarios. | Mostrar solicitante y campos antes de compartir; exigir consentimiento. |
 | Verificador abusivo | Biblioteca solicita notas o historial completo. | Requisitos permitidos por tipo de servicio y divulgación mínima. |
 | Pérdida del dispositivo | Se pierde el celular con la billetera. | Bloqueo local, revocación de la clave y recuperación mediante nueva billetera. |
