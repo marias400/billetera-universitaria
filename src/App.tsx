@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BrowserQRCodeReader } from '@zxing/browser'
 import QRCode from 'qrcode'
 import './App.css'
 import { api } from './lib/api'
@@ -38,12 +37,15 @@ function QrScanner({ onScan, onClose }: { onScan: (value: string) => void; onClo
   useEffect(() => {
     let controls: { stop: () => void } | undefined
     let cancelled = false
-    const reader = new BrowserQRCodeReader()
     if (!browserError && videoRef.current) {
-      void reader.decodeFromVideoDevice(undefined, videoRef.current, (result, _error, nextControls) => {
-        controls = nextControls
-        if (result && !cancelled) { cancelled = true; nextControls.stop(); onScan(result.getText()) }
-      }).then((value) => { controls = value }).catch(() => setError('No se pudo abrir la cámara. Revisá el permiso del navegador e intentá nuevamente.'))
+      const video = videoRef.current
+      void import('@zxing/browser').then(({ BrowserQRCodeReader }) => {
+        if (cancelled) return undefined
+        return new BrowserQRCodeReader().decodeFromVideoDevice(undefined, video, (result, _error, nextControls) => {
+          controls = nextControls
+          if (result && !cancelled) { cancelled = true; nextControls.stop(); onScan(result.getText()) }
+        })
+      }).then((value) => { if (value) controls = value }).catch(() => setError('No se pudo abrir la cámara. Revisá el permiso del navegador e intentá nuevamente.'))
     }
     return () => { cancelled = true; controls?.stop() }
   }, [browserError, onScan])
