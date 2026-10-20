@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#1d5b96"/>
+  <path d="M0 384h512v128H0z" fill="#113d60"/>
+  <path d="M0 376h512v12H0z" fill="#daaa00"/>
+  <text x="256" y="282" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="166" font-weight="700" letter-spacing="-12" text-anchor="middle">UNLaR</text>
+</svg>
