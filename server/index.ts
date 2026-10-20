@@ -211,4 +211,5 @@ app.post<{ Params: { id: string } }>('/api/attendance/sessions/:id/close', async
 })
 
 const port = Number(process.env.PORT ?? 4000)
-await app.listen({ port, host: '0.0.0.0' })
+const host = process.env.HOST ?? '127.0.0.1'
+await app.listen({ port, host })

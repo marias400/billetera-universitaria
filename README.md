@@ -54,6 +54,18 @@ Abrí en ambos celulares la dirección `https://...trycloudflare.com` que muestr
 
 En el celular del estudiante, abrí `Mi billetera` → `Escanear QR con la cámara`. La primera vez, aceptá el permiso de cámara. Se recomienda instalar la página en la pantalla de inicio para presentar la demo como una app.
 
+### Prueba local por ADB inalámbrico
+
+También se puede probar sin un túnel público, usando el puente inalámbrico de Android:
+
+1. En Android, activá **Opciones para desarrolladores → Depuración inalámbrica → Vincular dispositivo con código**. La Mac y el teléfono deben estar en la misma red Wi-Fi.
+2. En la Mac, ejecutá `adb pair IP:PUERTO_DE_VINCULACIÓN` e ingresá el código temporal que aparece en el teléfono.
+3. Luego ejecutá `adb connect IP:PUERTO_DE_CONEXIÓN` usando la dirección de conexión que muestra Depuración inalámbrica.
+4. Ejecutá `adb reverse tcp:5173 tcp:5173`.
+5. En Chrome Android, abrí `http://localhost:5173`. La Mac puede abrir la misma dirección en su navegador y actuar como emisor/verificador.
+
+El ejecutable `adb` se instala con Android Platform Tools. Si se usa cable USB, se puede autorizar la computadora y aplicar el mismo `adb reverse` sin emparejar por Wi-Fi.
+
 ### Secuencia de demostración
 
 1. En el equipo del profesor/emisor, abrí `Emisor`, elegí “Materia aprobada” y emití “Bases de Datos”.
