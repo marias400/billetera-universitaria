@@ -6,7 +6,7 @@
 
 **Objetivo:** permitir que un estudiante demuestre antecedentes académicos, registre asistencia y acredite acceso a servicios universitarios, compartiendo solo la información solicitada y con una firma digital verificable.
 
-El sistema sigue el modelo de tres actores de las credenciales verificables: un emisor institucional crea la credencial, el estudiante la conserva como titular y un tercero verifica su autenticidad.
+El sistema contempla tres perfiles de usuario principales: estudiante, profesor y personal institucional. El rol institucional tiene permisos limitados por área (académica, Biblioteca o Gimnasio); el profesor verifica credenciales y gestiona asistencia. La verificación y emisión son capacidades distintas, aunque algunos flujos institucionales pueden verificar una credencial.
 
 El proyecto no requiere blockchain ni criptomonedas. La autenticidad se logra con firmas digitales, claves públicas y un registro de credenciales revocadas.
 
@@ -44,10 +44,27 @@ Cada credencial será independiente. Si un verificador solo necesita comprobar q
 
 | Actor | Función |
 |---|---|
-| Emisor institucional | Crea, firma y revoca credenciales académicas. |
-| Estudiante | Guarda las credenciales en su billetera y decide cuándo presentarlas. |
-| Verificador | Solicita una evidencia concreta y comprueba su validez; puede ser una materia, beca, biblioteca o gimnasio. |
-| Profesor | Abre una sesión de asistencia y consulta las presencias registradas. |
+| Estudiante | Guarda las credenciales en su billetera, confirma asistencia y decide cuándo presentar una credencial. Su perfil tiene identificador, nombre y matrícula bloqueados tras la asignación. |
+| Profesor | Abre una sesión de asistencia, solicita evidencias y consulta presencias. No emite credenciales institucionales. |
+| Personal institucional | Emite y revoca credenciales solo dentro de su ámbito: área académica, Biblioteca o Gimnasio. |
+
+La demo dispone de cuentas ficticias para dos estudiantes, el profesor Marcelo Roldan y las tres áreas institucionales. Una sesión de laboratorio cambia entre estos perfiles; el servidor aplica permisos por rol. Las cuentas comparten una clave pública de demo y **no representan autenticación institucional real**.
+
+El nombre y matrícula del estudiante se incorporan como claims firmados en cada credencial nueva. Un cambio institucional válido debe verificarse por fuera de este prototipo y generar una credencial corregida, revocando la anterior. La pantalla de la billetera no permite editar la identidad.
+
+```mermaid
+flowchart LR
+    S[Estudiante: billetera y consentimiento]
+    P[Profesor: asistencia y verificación]
+    A[Administración académica: regularidad y materias]
+    B[Administración de Biblioteca: credenciales de biblioteca]
+    G[Administración de Gimnasio: credenciales de gimnasio]
+    A -->|emite| S
+    B -->|emite| S
+    G -->|emite| S
+    S -->|presenta con consentimiento| P
+    P -->|registra asistencia| S
+```
 
 ```mermaid
 flowchart LR

@@ -1,7 +1,7 @@
-const CACHE_NAME = 'unlar-wallet-shell-v1'
+const CACHE_NAME = 'unlar-wallet-shell-v2'
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(['/', '/manifest.webmanifest', '/app-icon.svg'])))
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(['/', '/manifest.webmanifest', '/app-icon.svg', '/unlar-logo.png'])))
   self.skipWaiting()
 })
 
@@ -20,5 +20,12 @@ self.addEventListener('fetch', (event) => {
       void caches.open(CACHE_NAME).then((cache) => cache.put('/', copy))
       return response
     }).catch(() => caches.match('/')))
+    return
+  }
+  if (/\.(?:js|css|png|svg|woff2?)$/i.test(url.pathname)) {
+    event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+      if (response.ok) void caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()))
+      return response
+    })))
   }
 })

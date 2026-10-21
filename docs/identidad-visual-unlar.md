@@ -14,10 +14,11 @@
 | Acento dorado visible | `#daaa00` en la línea superior, avisos y solicitudes temporales. |
 | Tipografía | Sans serif del sistema para preservar la lectura clara y el estilo sobrio de los canales institucionales consultados. |
 | Nombre institucional | Encabezado y emisor: “Universidad Nacional de La Rioja”. |
+| Logo | Se incorporó el PNG que el usuario aportó para el prototipo en `public/unlar-logo.png`. |
 | Estructura | Encabezado formal, módulos en una única barra y tarjetas de contenido con bordes discretos. |
 
 ## Límite de esta versión
 
-La resolución confirma que existe un manual y archivos de marca vigentes, pero durante la investigación no se encontró un enlace público a esos archivos maestros. Por esa razón, la aplicación no reproduce el escudo, los logos ni declara una tipografía oficial. La marca gráfica deberá sustituirse por los recursos entregados por UNLaR cuando estén disponibles y se cuente con autorización institucional.
+La resolución confirma que existe un manual y archivos de marca vigentes, pero durante la investigación no se encontró un enlace público a esos archivos maestros. La aplicación muestra el logo aportado por el usuario sin modificarlo; la tipografía del manual no está disponible en el proyecto y no se afirma que el resto de la interfaz sea una reproducción integral de la guía oficial.
 
 La leyenda “Prototipo académico” y el aviso de datos ficticios se mantienen para que la demostración no se confunda con un servicio oficial en producción.

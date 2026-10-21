@@ -14,8 +14,8 @@ El proyecto convierte datos académicos ficticios en credenciales firmadas. El e
 | # | Diapositiva | Tiempo | Parte |
 |---:|---|---:|---|
 | 1 | Billetera Universitaria Verificable | 0:30 | Apertura |
-| 2 | El problema que queremos resolver | 2:00 | Contexto |
-| 3 | Objetivo y alcance del prototipo | 1:30 | Propuesta |
+| 2 | El problema que queremos resolver | 1:30 | Contexto |
+| 3 | Objetivo y alcance del prototipo | 1:00 | Propuesta |
 | 4 | Actores y recorrido de una credencial | 2:00 | Caso de uso |
 | 5 | Arquitectura y tecnologías | 2:30 | Diseño |
 | 6 | Código 1: cómo se firma una credencial | 3:00 | Implementación |
@@ -24,7 +24,7 @@ El proyecto convierte datos académicos ficticios en credenciales firmadas. El e
 | 9 | Código 4: escaneo y consentimiento | 3:00 | Implementación |
 | 10 | Código 5: verificar o rechazar una presentación | 3:00 | Implementación |
 | 11 | Código 6: asistencia con QR temporal | 2:30 | Implementación |
-| 12 | Seguridad, límites y próximos pasos | 2:00 | Evaluación |
+| 12 | Firma, verificación offline y revocación | 3:00 | Evaluación |
 | 13 | Demostración en dos Android | 8:00 | Demo final |
 |  | **Total** | **36:00** | **Código: 15:00 (42%)** |
 
@@ -39,7 +39,7 @@ La diapositiva 11 es una sexta mirada al código: las cinco diapositivas 6–10 
 **En pantalla:** título, integrantes, materia, carrera y una captura limpia de la billetera.
 **Decir:** “Vamos a mostrar cómo una constancia académica puede emitirse, guardarse en el celular y comprobarse sin enviar todo el historial del estudiante”.
 
-### 2. El problema que queremos resolver — 2:00
+### 2. El problema que queremos resolver — 1:30
 
 **En pantalla:** un trámite pide una constancia; hoy el estudiante busca, descarga o reenvía un documento completo. Contraponerlo con una solicitud concreta: “¿Aprobó Bases de Datos?”.
 
@@ -51,9 +51,9 @@ La diapositiva 11 es una sexta mirada al código: las cinco diapositivas 6–10 
 
 Presentarlo como una oportunidad para explorar confianza y privacidad, no como una auditoría de los procesos reales de UNLaR.
 
-### 3. Objetivo y alcance del prototipo — 1:30
+### 3. Objetivo y alcance del prototipo — 1:00
 
-**En pantalla:** ciclo emisor → estudiante → verificador y los tipos de credenciales cubiertos: regularidad, materia aprobada, nota, biblioteca y gimnasio.
+**En pantalla:** ciclo emisor → estudiante → verificador y los tipos de credenciales cubiertos: regularidad, materia aprobada, nota, biblioteca y gimnasio. Añadir una nota visible: “En esta versión, el verificador consulta la API local”.
 
 **Decir:** el prototipo usa datos ficticios. El estudiante conserva una credencial firmada y comparte una presentación únicamente después de revisar la solicitud. No usa blockchain.
 
@@ -96,9 +96,13 @@ Android: cámara ZXing + IndexedDB
 - **qrcode y ZXing:** crear y leer los códigos.
 - **IndexedDB:** guardar credenciales y claves locales en el teléfono.
 
+**Aclaración sobre conexión:** la API corre en la Mac durante la demo. Los teléfonos pueden comunicarse con esa API en una red local sin depender de un servidor en la nube; eso permite una demo sin Internet si se mantiene el enlace local. La verificación, sin embargo, sigue consultando la API de la Mac: esto no es verificación offline.
+
+**Distinción para decir en voz alta:** “Sin Internet” significa que los equipos siguen conectados entre sí por la red local y la Mac sigue prestando la API. “Verificación offline” significa que el teléfono verificador puede validar por sí mismo, sin consultar a la Mac ni a otro servidor. El prototipo hace lo primero, no lo segundo.
+
 ### 6. Código 1: cómo se firma una credencial — 3:00
 
-**Abrir:** [`server/index.ts`](../server/index.ts#L48) y [`credentialCrypto.ts`](../src/lib/credentialCrypto.ts#L30).
+**Abrir:** [`server/index.ts`](../server/index.ts#L103) y [`credentialCrypto.ts`](../src/lib/credentialCrypto.ts#L30).
 
 **Mostrar solo:** canonicalización del contenido y `sign(null, ...)`; después, en el front, verificación con la clave pública del servidor.
 
@@ -116,13 +120,13 @@ function signCredential(payload: CredentialPayload): SignedCredential {
 
 ### 7. Código 2: emitir y entregar por QR — 3:00
 
-**Abrir:** [`server/index.ts`](../server/index.ts#L78) y el reclamo de entrega en el mismo archivo cerca de la ruta `/api/deliveries/:code/claim`.
+**Abrir:** [`server/index.ts`](../server/index.ts#L254) para la emisión y la ruta de reclamo `/api/deliveries/:code/claim`.
 
-**Mostrar:** el endpoint crea el contenido, firma, guarda estado y genera código aleatorio con vencimiento. En el reclamo, explicar vencimiento, uso único y vínculo de primera recepción.
+**Mostrar:** el emisor elige un perfil de estudiante, construye los claims, firma la credencial, guarda el estado y genera un código aleatorio con vencimiento. Para “Nota de materia”, el campo numérico se valida entre 1 y 10 y la nota queda dentro de los claims firmados. En el reclamo, explicar vencimiento, uso único y comprobación de que el perfil que reclama sea el destinatario.
 
 **Punto central:** el QR no contiene la credencial ni información académica; solo un código opaco que autoriza una recepción temporal. SQLite marca el código como usado.
 
-**Nota de honestidad:** hoy la identidad del estudiante es ficticia y la primera recepción vincula ese titular a una billetera. Eso sirve para la demostración, pero no reemplaza un alta institucional autenticada.
+**Nota de honestidad:** los nombres y matrículas son perfiles ficticios de laboratorio. La cuenta de demo fija esos datos y no permite editarlos desde la billetera, pero no reemplaza un alta institucional autenticada.
 
 ### 8. Código 3: billetera local y prueba de posesión — 3:00
 
@@ -139,7 +143,7 @@ La segunda ayuda a impedir que alguien copie solamente el archivo de la credenci
 
 ### 9. Código 4: escaneo y consentimiento — 3:00
 
-**Abrir:** [`App.tsx`](../src/App.tsx#L23), componente `QrScanner`, y la función `handleScan` cerca de la línea 145.
+**Abrir:** [`App.tsx`](../src/App.tsx#L45), componente `QrScanner`, y la función `handleScan` cerca de la línea 287.
 
 **Mostrar:** lectura con cámara y clasificación del QR (`delivery`, `verify`, `attendance`). Para una solicitud de verificación, la interfaz enseña qué tipo se pide y deja aceptar o rechazar.
 
@@ -147,7 +151,7 @@ La segunda ayuda a impedir que alguien copie solamente el archivo de la credenci
 
 ### 10. Código 5: verificar o rechazar una presentación — 3:00
 
-**Abrir:** [`server/index.ts`](../server/index.ts#L142), ruta `respond`, y [`credentialCrypto.ts`](../src/lib/credentialCrypto.ts#L34).
+**Abrir:** [`server/index.ts`](../server/index.ts#L340), ruta `respond`, y [`credentialCrypto.ts`](../src/lib/credentialCrypto.ts#L34).
 
 **Recorrer las validaciones en este orden:**
 
@@ -158,29 +162,50 @@ La segunda ayuda a impedir que alguien copie solamente el archivo de la credenci
 5. La clave pública coincide con la billetera vinculada.
 6. La firma de la billetera cubre el código de solicitud, la credencial y el titular.
 
-**Mensaje:** una firma válida no es suficiente si la credencial fue revocada o la solicitud ya venció.
+**Mensaje:** una firma válida no es suficiente si la credencial fue revocada o la solicitud ya venció. La verificación de esta versión requiere la API: allí se consulta el estado de revocación y se marca la solicitud de un solo uso como respondida.
 
 ### 11. Código 6: asistencia con QR temporal — 2:30
 
-**Abrir:** [`server/index.ts`](../server/index.ts#L173), rutas de asistencia, y el esquema `attendance_records` al comienzo del archivo.
+**Abrir:** [`server/index.ts`](../server/index.ts#L375), rutas de asistencia, y el esquema `attendance_records` al comienzo del archivo.
 
 **Mostrar:** QR de sesión de un minuto, firma de billetera en el registro y restricción única `(session_id, holder)` para rechazar duplicados. La lista del profesor se actualiza desde la API.
 
 **Límite que conviene decir:** prueba que una billetera vinculada respondió dentro de la ventana; no prueba por sí sola la presencia física ni evita que el titular preste un teléfono desbloqueado.
 
-### 12. Seguridad, límites y próximos pasos — 2:00
+### 12. Firma, verificación offline y revocación — 3:00
 
-**En pantalla:** dos columnas “Qué protege” y “Qué falta para producción”.
+**En pantalla:** dos columnas, “Prototipo actual” y “Posible ampliación offline”, más una comparación entre “firma” y “estado actual”.
 
-**Protege en el prototipo:** cambios a una credencial firmada, QR usado o vencido, credencial revocada, respuesta con una clave no vinculada y doble asistencia de la misma billetera.
+```text
+ACTUAL: estudiante ── presentación ──► API local en la Mac
+                                      valida firma, vigencia,
+                                      revocación y uso único
 
-**Limitaciones actuales:** datos ficticios; primera recepción gana; identificador fijo de estudiante; no hay roles ni autenticación para emisor/profesor/verificador; la clave de emisor se guarda localmente en la Mac; no hay PIN/passkey ni enrolamiento institucional. En una demo, no usar credenciales reales y cerrar el túnel HTTPS al terminar.
+AMPLIACIÓN: verificador ── desafío QR ──► estudiante
+             verificador ◄─ credencial + prueba firmada ─ billetera
+             valida localmente con clave pública y estado guardados
+```
+
+**Explicar en orden:**
+
+1. Una firma válida confirma que el contenido no cambió desde que lo firmó el emisor y que la firma corresponde a una clave pública que el verificador considera confiable.
+2. Con la credencial y esa clave pública guardadas, el verificador podría comprobar la firma sin conectarse al servidor.
+3. La firma no avisa si la credencial se revocó después. Para revisar eso offline haría falta una lista de revocación firmada y descargada previamente, con fecha de actualización y un límite de antigüedad.
+4. Si la lista está vencida, el resultado correcto es “firma válida; estado de revocación desconocido”, no “credencial activa”.
+
+**Qué hace hoy el prototipo:** la billetera guarda credenciales en el teléfono, pero al presentarlas el servidor verifica firma, vigencia, revocación, posesión de clave y uso de la solicitud. Por eso hoy no se debe afirmar que el verificador funciona offline.
+
+**Qué conllevaría el modo offline futuro:** el verificador generaría un desafío aleatorio y lo mostraría en un QR; la billetera firmaría una respuesta que vincule ese desafío con la credencial seleccionada; el verificador escanearía la respuesta y comprobaría localmente la firma del emisor, la prueba de posesión, el vencimiento y una lista de revocación firmada que descargó antes. La solicitud/respuesta sería un intercambio de dos QR entre teléfonos, ya que hoy la API hace de intermediaria. El desafío reduce la reutilización de una captura vieja, pero no acredita por sí solo que quien sostiene el teléfono sea el titular.
+
+**Condición para comunicar el resultado:** si el verificador no tiene una lista de revocación vigente según la política acordada, debe mostrar “firma válida; estado de revocación desconocido” o pedir conexión, nunca asegurar que la credencial sigue activa. Una política offline tiene que decidir cuánto tiempo acepta esa lista y qué tipos de operaciones se permiten sin conexión.
+
+**Límites y trabajo adicional:** los datos son ficticios y la identidad no está validada por el padrón universitario. La revocación nueva no puede conocerse mientras el verificador esté desconectado. La ampliación de verificación offline no exige necesariamente emitir sin conexión: si también se quisiera emitir offline, habría que proteger la clave privada institucional en el dispositivo emisor, limitar quién puede usarla y sincronizar luego las emisiones y revocaciones. En una demo, no usar credenciales reales y cerrar el túnel HTTPS al terminar.
 
 **Próximos pasos sugeridos:** probar la secuencia en dos Android, capturar evidencia, agregar autenticación/enrolamiento y revisar compatibilidad formal con W3C VC u OpenID4VP si se busca interoperabilidad.
 
 ### 13. Demostración en dos Android — 8:00, siempre al final
 
-**Distribución:** Android 1 representa al emisor/profesor/verificador (se cambia de pestaña); Android 2 representa al estudiante. La Mac ejecuta la API y Vite. Ambos celulares abren el mismo enlace HTTPS temporal. Usar únicamente datos de prueba.
+**Distribución:** Android 1 representa al profesor/verificador y Android 2 al estudiante. La administración institucional se muestra desde la Mac o cambiando la cuenta de demo. La Mac ejecuta la API y Vite; usar únicamente datos de prueba.
 
 | Tiempo | Acción |
 |---:|---|
@@ -193,8 +218,9 @@ La segunda ayuda a impedir que alguien copie solamente el archivo de la credenci
 
 #### Checklist antes de exponer
 
-- Mac conectada a internet y API (`npm run server`) y Vite (`npm run dev -- --host 0.0.0.0`) iniciados.
-- Túnel HTTPS temporal hacia `http://localhost:5173`; probar el enlace y el permiso de cámara en ambos Android antes de entrar al aula.
+- API (`npm run server`) y Vite (`npm run dev -- --host 0.0.0.0`) iniciados en la Mac.
+- Para la cámara: usar un túnel HTTPS temporal o abrir `http://localhost:5173` con `adb reverse tcp:5173 tcp:5173` activo. Un enlace HTTP por IP local no habilita la cámara en Android.
+- Se puede hacer la demo sin Internet si los teléfonos conservan conexión local con la Mac; la API de la Mac debe seguir encendida. Esto no equivale a verificación offline.
 - Ambos teléfonos abren la misma URL; el servidor conserva SQLite y la clave del emisor en la Mac.
 - Probar previamente emisión, escaneo, presentación y asistencia; generar credenciales ficticias nuevas si hace falta.
 - Tener capturas o un video local de respaldo por si falla internet, cámara o proyección.
@@ -202,7 +228,7 @@ La segunda ayuda a impedir que alguien copie solamente el archivo de la credenci
 
 #### Frase para cerrar la demo
 
-“En este recorrido mostramos que una credencial puede verificarse sin confiar en una captura de pantalla: el servidor comprueba quién la emitió, si sigue vigente y si la respuesta corresponde a una solicitud nueva; el estudiante conserva el control de compartirla.”
+“En este recorrido el estudiante conserva una credencial firmada y decide cuándo compartirla. Hoy el servidor comprueba la firma, la vigencia, la revocación y la solicitud. La firma permitiría verificar que el contenido no fue alterado sin conexión, pero para conocer una revocación reciente hace falta actualizar el estado con el emisor.”
 
 ---
 

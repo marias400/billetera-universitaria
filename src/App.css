@@ -1,7 +1,22 @@
 #root { min-height: 100vh; }
 main { max-width: 1100px; margin: 0 auto; padding: 0 28px 34px; }
-.topbar { min-height: 82px; display: flex; align-items: center; justify-content: space-between; border-top: 5px solid #daaa00; border-bottom: 1px solid #d6e1eb; }
+.topbar { min-height: 82px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: #fff; border-top: 5px solid #daaa00; border-bottom: 1px solid #d6e1eb; }
+.session-badge { display: flex; align-items: center; gap: 14px; }
+.session-badge > span { display: grid; gap: 2px; text-align: right; color: #113d60; }
+.session-badge small { color: #60778b; font-size: .75rem; }
+.login-page { min-height: 100vh; display: flex; flex-direction: column; }
+.startup-error { width: min(100% - 32px, 620px); margin: 12vh auto 0; padding: 28px; border: 1px solid #e5bcbc; border-top: 4px solid #a53c3c; border-radius: 10px; background: #fff; }
+.startup-error p { color: #526b80; line-height: 1.55; }
+.startup-error pre { overflow-wrap: anywhere; white-space: pre-wrap; color: #8a3137; }
+.startup-error button { margin-top: 16px; }
+.login-card { width: min(100%, 560px); margin: 9vh auto 0; padding: 30px; display: grid; gap: 16px; border: 1px solid #d6e1eb; border-top: 4px solid #1d5b96; border-radius: 12px; background: #fff; box-shadow: 0 12px 36px #113d6010; }
+.login-card h1 { margin: 0; font-size: 2.4rem; }
+.login-card > p { margin: 0; }
+.login-card .primary-button { justify-self: start; min-width: 150px; }
+.login-page footer { margin: auto 0 24px; }
+.session-badge .secondary-button { padding: 8px 11px; }
 .brand { display: flex; align-items: center; gap: 13px; color: #113d60; }
+.brand-logo { display: block; width: min(220px, 38vw); height: auto; object-fit: contain; }
 .brand-mark { display: grid; place-items: center; min-width: 62px; height: 38px; color: #1d5b96; border-right: 1px solid #b8cce0; font-size: 1.18rem; font-weight: 800; letter-spacing: -.06em; }
 .brand-copy { display: grid; gap: 3px; line-height: 1; }
 .brand-copy strong { font-size: .93rem; letter-spacing: .01em; }
@@ -57,6 +72,34 @@ input, select { width: 100%; padding: 11px 12px; border: 1px solid #bfd0df; bord
 .qr-placeholder { display: grid; place-items: center; width: 110px; height: 110px; color: #1d5b96; border: 8px solid #1d5b96; border-radius: 6px; font-size: 4.2rem; line-height: 1; }
 footer { margin-top: 56px; color: #698095; font-size: .84rem; text-align: center; }
 .wallet-actions { display: flex; align-items: center; gap: 12px; margin: 0 0 17px; flex-wrap: wrap; }
+.student-profile { display: grid; gap: 10px; margin: 0 0 20px; padding: 17px; border: 1px solid #d6e1eb; border-radius: 10px; background: #f9fbfd; }
+.student-profile .eyebrow, .student-profile p { margin: 0; }
+.student-profile label { max-width: 470px; }
+.student-profile .secondary-button { justify-self: start; }
+.student-profile small { line-height: 1.45; }
+.attendance-page { display: grid; gap: 22px; }
+.attendance-page .verify-layout { max-width: none; }
+.roster-panel { border-top: 4px solid #1d5b96; }
+.roster-panel .section-heading { align-items: center; gap: 16px; }
+.roster-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.live-badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 999px; color: #205c37; background: #e6f5e9; font-size: .78rem; font-weight: 800; white-space: nowrap; }
+.live-badge i { width: 8px; height: 8px; border-radius: 50%; background: #2f9b52; box-shadow: 0 0 0 3px #2f9b5225; }
+.download-button { display: inline-flex; align-items: center; text-decoration: none; white-space: nowrap; }
+.roster-scroll { overflow-x: auto; margin: 18px 0 10px; border: 1px solid #d6e1eb; border-radius: 8px; }
+.roster-table { width: 100%; border-collapse: collapse; text-align: center; }
+.roster-table th, .roster-table td { min-width: 88px; padding: 12px 14px; border-bottom: 1px solid #e7eef5; }
+.roster-table thead th { color: #113d60; background: #dcebf6; font-size: .86rem; }
+.roster-table th:first-child { min-width: 220px; text-align: left; }
+.roster-table tbody th { color: #284f70; font-weight: 700; }
+.roster-table tbody tr:nth-child(even) th { background: #f3f7fa; }
+.roster-table tbody tr:last-child th, .roster-table tbody tr:last-child td { border-bottom: 0; }
+.present-cell { color: #fff; background: #25824a; font-size: 1.05rem; font-weight: 900; }
+.absent-cell { color: #8a3137; background: #fff0ee; font-weight: 800; }
+.roster-legend { display: flex; gap: 9px; margin-top: 12px; }
+.legend-chip { padding: 6px 10px; border-radius: 999px; font-size: .8rem; font-weight: 800; }
+.legend-present { color: #205c37; background: #e2f3e6; }
+.legend-absent { color: #8a3137; background: #ffe7e4; }
+.roster-panel > small { display: block; }
 .empty-state { display: grid; justify-items: center; gap: 8px; padding: 40px 22px; text-align: center; border: 1px dashed #bfd0df; border-radius: 10px; background: #f9fbfd; }
 .empty-state h3, .empty-state p { margin: 0; }
 .empty-state p { max-width: 370px; color: #60778b; line-height: 1.5; }
@@ -91,4 +134,4 @@ footer { margin-top: 56px; color: #698095; font-size: .84rem; text-align: center
 .consent-credential small { color: #698095; }
 .consent-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 9px; margin-top: 20px; }
 .primary-button:disabled, .secondary-button:disabled { opacity: .6; cursor: wait; }
-@media (max-width: 720px) { main { padding: 0 16px 28px; } .hero, .layout { grid-template-columns: 1fr; display: grid; } .hero { padding-top: 40px; } .trust-card { min-width: 0; } h1 { font-size: 2.8rem; } .form-grid { grid-template-columns: 1fr; } .detail-panel { position: static; } .mode { display: none; } }
+@media (max-width: 720px) { main { padding: 0 16px 28px; } .login-page { padding: 0 16px 28px; } .login-page .topbar { gap: 12px; } .login-page .mode { display: none; } .login-card { margin-top: 7vh; padding: 22px; } .brand-logo { width: min(165px, 43vw); } .session-badge { gap: 7px; } .session-badge > span { max-width: 135px; } .session-badge small { font-size: .68rem; } .session-badge .secondary-button { padding: 7px 8px; font-size: .75rem; } .hero, .layout { grid-template-columns: 1fr; display: grid; } .hero { padding-top: 40px; } .trust-card { min-width: 0; } h1 { font-size: 2.8rem; } .form-grid { grid-template-columns: 1fr; } .detail-panel { position: static; } .mode { display: none; } .roster-panel .section-heading { align-items: flex-start; flex-direction: column; } .roster-actions { justify-content: flex-start; } .download-button { white-space: normal; } }
