@@ -9,10 +9,13 @@ lerna-debug.log*
 
 node_modules
 .tools/
+.android-demo-devices
 dist
 dist-ssr
+.presentation-build/
 *.local
 data/
+certs/local-dev/
 
 # Editor directories and files
 .vscode/*

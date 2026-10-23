@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import './App.css'
-import { api } from './lib/api'
+import { api, downloadFile } from './lib/api'
 import { signWalletProof, verifyCredential, type SignedCredential } from './lib/credentialCrypto'
 import { listWalletCredentials, storeWalletCredential, updateWalletCredentialStatus, type WalletCredential } from './lib/walletStore'
 
@@ -89,6 +89,7 @@ function App() {
   const [working, setWorking] = useState(false)
   const [pendingVerify, setPendingVerify] = useState<VerifyRequest | null>(null)
   const [pendingAttendance, setPendingAttendance] = useState<AttendanceSession | null>(null)
+  const [attendanceError, setAttendanceError] = useState('')
   const [attendance, setAttendance] = useState<AttendanceSession | null>(null)
   const [attendanceRecords, setAttendanceRecords] = useState<{ holder: string; studentId: string; studentName: string; recordedAt: string }[]>([])
   const [studentName, setStudentName] = useState('')
@@ -96,6 +97,8 @@ function App() {
   const [recipientStudentId, setRecipientStudentId] = useState('mariano-arias-simone')
   const [demoStudents, setDemoStudents] = useState<DemoStudent[]>([])
   const [attendanceRoster, setAttendanceRoster] = useState<AttendanceRoster | null>(null)
+  const [attendanceDownloadError, setAttendanceDownloadError] = useState('')
+  const [attendanceDownloadWorking, setAttendanceDownloadWorking] = useState(false)
   const [verifyResult, setVerifyResult] = useState<{ valid: boolean; title: string; kind: string; verifiedAt: string } | null>(null)
   const selectedCredential = useMemo(() => credentials.find((credential) => credential.id === selectedCredentialId) ?? credentials[0], [credentials, selectedCredentialId])
   const savedStudent = demoStudents.find((student) => student.id === studentId)
@@ -168,6 +171,18 @@ function App() {
   const refreshAttendanceRoster = useCallback(async () => {
     setAttendanceRoster(await api<AttendanceRoster>('/api/attendance/roster'))
   }, [])
+
+  const downloadAttendance = async () => {
+    setAttendanceDownloadError('')
+    setAttendanceDownloadWorking(true)
+    try {
+      await downloadFile('/api/attendance/export.csv', 'planilla-asistencia.csv')
+    } catch (error) {
+      setAttendanceDownloadError(error instanceof Error ? error.message : 'No se pudo descargar la planilla.')
+    } finally {
+      setAttendanceDownloadWorking(false)
+    }
+  }
 
   // La carga inicial sincroniza el estado de React con IndexedDB y la API.
   // eslint-disable-next-line react/set-state-in-effect
@@ -343,6 +358,7 @@ function App() {
       setPendingAttendance(null)
       return
     }
+    setAttendanceError('')
     setWorking(true)
     try {
       const proof = await signWalletProof(`attendance.${pendingAttendance.id}.${studentId}`)
@@ -350,7 +366,11 @@ function App() {
       setPendingAttendance(null)
       setNotice(`Asistencia registrada para ${pendingAttendance.subject}.`)
       await refreshAttendanceRoster()
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo registrar la asistencia.') }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo registrar la asistencia.'
+      setAttendanceError(message)
+      setNotice(message)
+    }
     finally { setWorking(false) }
   }
 
@@ -407,12 +427,12 @@ function App() {
       {activeTab === 'verify' && <section className="layout verify-layout"><div className="panel"><p className="eyebrow">Verificador</p><h2>Solicitar evidencia</h2><p className="muted">El QR vence en cinco minutos y se acepta una única respuesta.</p><label>Requisito<select value={requestedKind} onChange={(event) => setRequestedKind(event.target.value as CredentialKind)}>{kinds.map((kind) => <option key={kind}>{kind}</option>)}</select></label><button type="button" className="primary-button" onClick={() => void createPresentationRequest()} disabled={working}>Generar QR de solicitud</button>{verifyResult && <div className="verification-result"><span className="result-check">✓</span><div><strong>Credencial válida</strong><p>{verifyResult.title} · {verifyResult.kind}</p><small>Firma, vigencia, revocación y posesión verificadas</small></div></div>}</div><aside className="panel request-panel">{qr?.value.includes(':verify:') ? <><QrDisplay value={qr.value} label={qr.label} /><h3>Solicitud temporal</h3><p>Vence: {formatDate(qr.expiresAt)}</p><button type="button" className="secondary-button" onClick={() => void pollVerification()}>Consultar resultado</button></> : <><span className="qr-placeholder">▦</span><h3>Presentación con consentimiento</h3><p>El estudiante ve qué se solicita y confirma antes de enviar su credencial.</p></>}</aside></section>}
 
       {activeTab === 'attendance' && <section className="attendance-page">
-        <div className="layout verify-layout"><div className="panel"><p className="eyebrow">Profesor · {actor.name}</p><h2>Asistencia de clase</h2><p className="muted">El QR de asistencia vence en un minuto. Cada billetera vinculada puede registrar una sola presencia por sesión.</p><label>Materia<input value={attendanceSubject} onChange={(event) => setAttendanceSubject(event.target.value)} /></label>{attendance?.status === 'Abierta' ? <button type="button" className="secondary-button" onClick={() => void closeAttendance()}>Cerrar sesión de asistencia</button> : <button type="button" className="primary-button" onClick={() => void openAttendance()} disabled={working}>Abrir asistencia y mostrar QR</button>}<div className="attendance-list"><h3>Presentes en esta sesión ({attendanceRecords.length})</h3>{attendanceRecords.map((record) => <p key={`${record.holder}-${record.recordedAt}`}>✓ {record.studentName} · {formatDate(record.recordedAt)}</p>)}{attendance?.status === 'Abierta' && attendanceRecords.length === 0 && <p className="muted">Esperando registros desde las billeteras.</p>}</div></div><aside className="panel request-panel">{attendance?.status === 'Abierta' && qr?.value.includes(':attendance:') ? <><QrDisplay value={qr.value} label={qr.label} /><h3>{attendance.subject}</h3><p>{attendance.section} · vence: {formatDate(attendance.expiresAt)}</p></> : <><span className="qr-placeholder">▦</span><h3>Asistencia temporal</h3><p>Abrí una sesión para generar el QR que escanearán los estudiantes.</p></>}</aside></div>
-        <div className="panel roster-panel"><div className="section-heading"><div><p className="eyebrow">Planilla local · {attendanceRoster?.teacherName ?? 'Marcelo Roldan'}</p><h2>{attendanceRoster?.courseName ?? 'Seminario de Actualización II'}</h2></div><div className="roster-actions"><span className="live-badge"><i />Actualización en vivo · 3 s</span><a className="secondary-button download-button" href="/api/attendance/export.csv" download="planilla-asistencia.csv">Descargar para Excel o Numbers</a></div></div><p className="muted">La asistencia se actualiza al registrar una presencia.</p><div className="roster-scroll"><table className="roster-table"><thead><tr><th>Estudiante</th>{attendanceRoster?.dates.map((date) => <th key={date.key}>{date.label}</th>)}{!attendanceRoster?.dates.length && <th>Sin clases registradas</th>}</tr></thead><tbody>{(attendanceRoster?.students ?? demoStudents.map((student): AttendanceRoster['students'][number] => ({ ...student, attendance: {} }))).map((student) => <tr key={student.id}><th scope="row">{student.fullName}</th>{attendanceRoster?.dates.map((date) => { const state = student.attendance[date.key] ?? 'A'; return <td key={date.key} className={state === 'P' ? 'present-cell' : 'absent-cell'}>{state}</td> })}{!attendanceRoster?.dates.length && <td className="absent-cell">A</td>}</tr>)}</tbody></table></div><div className="roster-legend"><span className="legend-chip legend-present">P · Presente</span><span className="legend-chip legend-absent">A · Ausente</span></div></div>
+        <div className="layout verify-layout"><div className="panel"><p className="eyebrow">Profesor · {actor.name}</p><h2>Asistencia de clase</h2><p className="muted">El QR vence en un minuto. Para leerlo y confirmar, cada estudiante debe estar conectado a la misma red Wi-Fi que el profesor. Cada billetera puede registrar una sola presencia por sesión.</p><label>Materia<input value={attendanceSubject} onChange={(event) => setAttendanceSubject(event.target.value)} /></label>{attendance?.status === 'Abierta' ? <button type="button" className="secondary-button" onClick={() => void closeAttendance()}>Cerrar sesión de asistencia</button> : <button type="button" className="primary-button" onClick={() => void openAttendance()} disabled={working}>Abrir asistencia y mostrar QR</button>}<div className="attendance-list"><h3>Presentes en esta sesión ({attendanceRecords.length})</h3>{attendanceRecords.map((record) => <p key={`${record.holder}-${record.recordedAt}`}>✓ {record.studentName} · {formatDate(record.recordedAt)}</p>)}{attendance?.status === 'Abierta' && attendanceRecords.length === 0 && <p className="muted">Esperando registros desde las billeteras.</p>}</div></div><aside className="panel request-panel">{attendance?.status === 'Abierta' && qr?.value.includes(':attendance:') ? <><QrDisplay value={qr.value} label={qr.label} /><h3>{attendance.subject}</h3><p>{attendance.section} · vence: {formatDate(attendance.expiresAt)}</p></> : <><span className="qr-placeholder">▦</span><h3>Asistencia temporal</h3><p>Abrí una sesión para generar el QR que escanearán los estudiantes.</p></>}</aside></div>
+        <div className="panel roster-panel"><div className="section-heading"><div><p className="eyebrow">Planilla local · {attendanceRoster?.teacherName ?? 'Marcelo Roldan'}</p><h2>{attendanceRoster?.courseName ?? 'Seminario de Actualización II'}</h2></div><div className="roster-actions"><span className="live-badge"><i />Actualización en vivo · 3 s</span><button type="button" className="secondary-button download-button" onClick={() => void downloadAttendance()} disabled={attendanceDownloadWorking}>{attendanceDownloadWorking ? 'Preparando…' : 'Descargar para Excel o Numbers'}</button></div></div><p className="muted">La asistencia se actualiza al registrar una presencia.</p>{attendanceDownloadError && <p className="consent-error" role="alert">No se pudo descargar: {attendanceDownloadError}</p>}<div className="roster-scroll"><table className="roster-table"><thead><tr><th>Estudiante</th>{attendanceRoster?.dates.map((date) => <th key={date.key}>{date.label}</th>)}{!attendanceRoster?.dates.length && <th>Sin clases registradas</th>}</tr></thead><tbody>{(attendanceRoster?.students ?? demoStudents.map((student): AttendanceRoster['students'][number] => ({ ...student, attendance: {} }))).map((student) => <tr key={student.id}><th scope="row">{student.fullName}</th>{attendanceRoster?.dates.map((date) => { const state = student.attendance[date.key] ?? 'A'; return <td key={date.key} className={state === 'P' ? 'present-cell' : 'absent-cell'}>{state}</td> })}{!attendanceRoster?.dates.length && <td className="absent-cell">A</td>}</tr>)}</tbody></table></div><div className="roster-legend"><span className="legend-chip legend-present">P · Presente</span><span className="legend-chip legend-absent">A · Ausente</span></div></div>
       </section>}
 
       {pendingVerify && <div className="consent-backdrop"><section className="consent-card" role="dialog" aria-modal="true"><p className="eyebrow">Solicitud del verificador</p><h2>¿Compartir esta credencial?</h2><p>El verificador solicita: <strong>{pendingVerify.kind}</strong></p>{credentials.filter((credential) => credential.type === pendingVerify.kind && credential.localStatus === 'Activa').map((credential) => <div className="consent-credential" key={credential.id}><span className="credential-icon">{iconFor(credential.type as CredentialKind)}</span><div><strong>{credential.claims.titulo}</strong><p>{credential.claims.detalle}</p><small>Se comparte solo esta credencial</small></div></div>)}{!credentials.some((credential) => credential.type === pendingVerify.kind && credential.localStatus === 'Activa') && <p className="scanner-error">No tenés una credencial activa de este tipo.</p>}<div className="consent-actions"><button type="button" className="secondary-button" onClick={() => { setPendingVerify(null); setNotice('Rechazaste compartir la credencial.') }}>Rechazar</button>{credentials.filter((credential) => credential.type === pendingVerify.kind && credential.localStatus === 'Activa').map((credential) => <button type="button" className="primary-button" key={credential.id} disabled={working} onClick={() => void shareCredential(credential)}>Confirmar y compartir</button>)}</div></section></div>}
-      {pendingAttendance && <div className="consent-backdrop"><section className="consent-card" role="dialog" aria-modal="true"><p className="eyebrow">Confirmar asistencia</p><h2>{pendingAttendance.subject}</h2><p>{pendingAttendance.section} · sesión temporal del profesor</p><p>Se registrará la presencia de <strong>{savedStudent?.fullName ?? 'un estudiante sin identificar'}</strong> usando una prueba criptográfica de esta billetera. No se comparten notas ni otras credenciales.</p><div className="consent-actions"><button type="button" className="secondary-button" onClick={() => { setPendingAttendance(null); setNotice('Cancelaste el registro de asistencia.') }}>Cancelar</button><button type="button" className="primary-button" disabled={working} onClick={() => void confirmAttendance()}>Confirmar presencia</button></div></section></div>}
+      {pendingAttendance && <div className="consent-backdrop"><section className="consent-card" role="dialog" aria-modal="true"><p className="eyebrow">Confirmar asistencia</p><h2>{pendingAttendance.subject}</h2><p>{pendingAttendance.section} · sesión temporal del profesor</p><p>Se registrará la presencia de <strong>{savedStudent?.fullName ?? 'un estudiante sin identificar'}</strong> usando una prueba criptográfica de esta billetera. No se comparten notas ni otras credenciales.</p>{attendanceError && <p className="consent-error" role="alert">No se pudo registrar: {attendanceError}</p>}<div className="consent-actions"><button type="button" className="secondary-button" onClick={() => { setPendingAttendance(null); setAttendanceError(''); setNotice('Cancelaste el registro de asistencia.') }}>Cancelar</button><button type="button" className="primary-button" disabled={working} onClick={() => void confirmAttendance()}>{working ? 'Registrando…' : 'Confirmar presencia'}</button></div></section></div>}
       {scannerOpen && <QrScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />}
       <footer>Universidad Nacional de La Rioja · Credenciales digitales</footer>
     </main>

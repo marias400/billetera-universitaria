@@ -13,7 +13,7 @@ El prototipo ya implementa una demo de flujo entre dispositivos:
 - La primera recepción vincula el identificador de estudiante de prueba a esa billetera.
 - Un verificador genera una solicitud QR de un solo uso; el estudiante ve qué se pide, acepta o rechaza, y el verificador consulta el resultado.
 - El servidor verifica firma institucional, revocación, vencimiento, uso de la solicitud y prueba de posesión de la billetera.
-- El prototipo separa los perfiles Estudiante, Profesor e Institución. El profesor Marcelo Roldan abre sesiones de asistencia con QR de un minuto; solo la billetera con el perfil de estudiante correspondiente puede confirmar una presencia no duplicada.
+- El prototipo separa los perfiles Estudiante, Profesor e Institución. El profesor Marcelo Roldan abre sesiones de asistencia con QR de un minuto; el servidor solo permite leerlo y confirmar la presencia desde la misma red local privada que usó el profesor, además de exigir el perfil de estudiante correspondiente y rechazar duplicados.
 - Las cuentas de laboratorio incluyen a los estudiantes Mariano Arias Simone y Peralta Herrera Nahuel, al profesor Marcelo Roldan y a áreas institucionales académica, Biblioteca y Gimnasio. Todas usan la clave de demo `demo2026`.
 - Los perfiles de estudiantes tienen nombres y matrículas ficticios, inmutables desde la billetera. Las credenciales nuevas incluyen nombre, matrícula e identificador del perfil como claims protegidos por la firma institucional.
 - Al elegir “Nota de materia”, el emisor solicita una nota de 1 a 10 y la incluye en los claims firmados de la credencial.
@@ -48,7 +48,7 @@ En otra terminal, iniciar la interfaz:
 
     npm run dev -- --host 0.0.0.0
 
-En la Mac, abrí la dirección local que informa Vite. Para dos celulares en la misma red, abrí `http://IP-DE-LA-MAC:5173`.
+Para tomar asistencia, iniciá el servidor en una computadora conectada al Wi-Fi del aula y abrí la aplicación desde la dirección local de esa computadora, por ejemplo `https://IP-DE-LA-COMPUTADORA:5173`. Los estudiantes deben abrirla desde la misma red. Mantené el servidor dentro de esa red y no uses un túnel público ni lo expongas a Internet durante la asistencia.
 
 ### Escaneo desde Android
 
@@ -56,7 +56,7 @@ Los navegadores Android solo habilitan la cámara y la instalación de la PWA en
 
     cloudflared tunnel --url http://localhost:5173
 
-Abrí en ambos celulares la dirección `https://...trycloudflare.com` que muestre el túnel. Vite reenvía las rutas `/api` y `/health` a la API local del puerto 4001. El túnel es público mientras esté encendido: usá solo datos ficticios y cerralo al terminar.
+Abrí en ambos celulares la dirección `https://...trycloudflare.com` que muestre el túnel. Vite reenvía las rutas `/api` y `/health` a la API local del puerto 4001. El túnel expone la aplicación a Internet mientras esté encendido, por lo que no debe usarse para tomar asistencia. Usá solo datos ficticios y cerralo al terminar.
 
 En el celular del estudiante, abrí `Mi billetera` → `Escanear QR con la cámara`. La primera vez, aceptá el permiso de cámara. Se recomienda instalar la página en la pantalla de inicio para presentar la demo como una app.
 
@@ -71,6 +71,16 @@ También se puede probar sin un túnel público, usando el puente inalámbrico d
 5. En Chrome Android, abrí `http://localhost:5173`. La Mac puede abrir la misma dirección en su navegador y actuar como emisor/verificador.
 
 El ejecutable `adb` se instala con Android Platform Tools. Si se usa cable USB, se puede autorizar la computadora y aplicar el mismo `adb reverse` sin emparejar por Wi-Fi.
+
+#### Abrir los dos Android desde la Mac
+
+El proyecto incluye un lanzador para conectar los dos equipos, iniciar la app local si hace falta, abrirla en ambos teléfonos y mostrar sus pantallas lado a lado con scrcpy:
+
+    ./scripts/android-doble-pantalla.sh
+
+El programa pide el IP:puerto de conexión que figura en **Depuración inalámbrica** para cada teléfono. Si un equipo todavía no está emparejado con esta Mac, ingresá también su IP:puerto de **Vincular dispositivo con código** y el código temporal. Si ya se emparejó antes, dejá vacío ese dato. El código se solicita sin mostrarlo en pantalla y no se guarda.
+
+Android puede cambiar los puertos de conexión al desactivar o reiniciar Depuración inalámbrica; en ese caso, copiá el puerto nuevo que aparece en la pantalla del teléfono. La Mac y ambos Android deben compartir la red Wi-Fi. El lanzador conserva la conexión ADB hasta que se cierren las ventanas de scrcpy y deja los registros de inicio de la app en `logs/`.
 
 Si Android muestra la pestaña en blanco con esa dirección, normalmente se perdió el puente inalámbrico: `localhost` apunta al propio teléfono y solo funciona con `adb reverse` activo. Confirmá la conexión con `adb devices`; si no aparece el teléfono, volvé a vincular Depuración inalámbrica y ejecutá `adb reverse tcp:5173 tcp:5173`. Recargá la página para quitar una posible caché de desarrollo anterior. Si accedés por la IP de la Mac, usá HTTPS para habilitar cámara y WebCrypto.
 

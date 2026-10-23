@@ -175,7 +175,7 @@ Antes de aceptar una presentación, el estudiante verá una pantalla similar a e
 
 La asistencia será un caso de uso distinto, pero utilizará la identidad criptográfica ya existente en la billetera. No se usará un QR fijo del estudiante, ya que podría fotografiarse o reenviarse.
 
-El profesor abrirá una sesión de asistencia para una comisión, clase y horario determinados. La aplicación mostrará un QR único, con vencimiento breve. Cada estudiante presente lo escaneará desde su billetera y autorizará el envío de una prueba firmada de presencia.
+El profesor abrirá una sesión de asistencia para una comisión, clase y horario determinados. La aplicación mostrará un QR único, con vencimiento breve. Cada estudiante presente lo escaneará desde su billetera y autorizará el envío de una prueba firmada de presencia. Para limitar el acceso a la clase, el servidor debe ejecutarse en una computadora conectada al Wi-Fi del aula y permanecer accesible solo desde esa red local.
 
 ```mermaid
 sequenceDiagram
@@ -191,7 +191,7 @@ sequenceDiagram
     S-->>P: Registra asistencia válida
 ```
 
-Cada QR estará ligado a una sesión concreta, tendrá un código aleatorio, expirará en uno o dos minutos y no podrá usarse nuevamente. El profesor podrá cerrar la sesión y consultar el listado de presentes.
+Cada QR estará ligado a una sesión concreta, tendrá un código aleatorio, expirará en uno o dos minutos y no podrá usarse nuevamente. El profesor podrá cerrar la sesión y consultar el listado de presentes. La computadora que aloja la aplicación debe permanecer en la red del aula y no debe exponerse mediante un túnel público durante la asistencia; de lo contrario, alguien fuera del aula también podría acceder al QR y al servidor.
 
 La asistencia no requiere revelar notas, materias aprobadas ni credenciales de servicios. El sistema solo registrará la identidad académica mínima necesaria, la sesión y el momento de registro.
 

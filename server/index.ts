@@ -401,7 +401,7 @@ app.post<{ Params: { id: string }; Body: { studentId?: string; walletPublicKey?:
   const studentId = actor.studentId
   if (!studentId || !walletPublicKey || !holderSignature) return reply.code(400).send({ message: 'Completá tus datos y registrá la billetera antes de marcar asistencia.' })
   const student = db.prepare('select id, full_name as fullName, wallet_public_key as walletPublicKey from students where id = ?').get(studentId) as { id: string; fullName: string; walletPublicKey: string | null } | undefined
-  if (!student || student.walletPublicKey !== walletPublicKey) return reply.code(422).send({ message: 'La billetera no está vinculada a este estudiante.' })
+  if (!student) return reply.code(404).send({ message: 'No se encontró el perfil del estudiante.' })
   try {
     const proofKey = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
     const proofMessage = `attendance.${request.params.id}.${student.id}`
