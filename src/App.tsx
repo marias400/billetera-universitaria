@@ -25,20 +25,20 @@ type NetworkInfo = { ssid: string; addresses: string[] }
 const kinds: CredentialKind[] = ['Alumno regular', 'Regularidad', 'Materia aprobada', 'Nota de materia', 'Biblioteca', 'Gimnasio']
 const tabs: { id: TabId; label: string; icon: string }[] = [
   { id: 'wallet', label: 'Mi billetera', icon: '🪪' },
-  { id: 'issuer', label: 'Emisor', icon: '🏛️' },
+  { id: 'issuer', label: 'Emisión', icon: '🏛️' },
   { id: 'verify', label: 'Verificar', icon: '🔍' },
   { id: 'attendance', label: 'Asistencia', icon: '📋' },
   { id: 'connection', label: 'Conexión', icon: '📶' },
   { id: 'souvenir', label: 'Souvenir', icon: '✦' },
-  { id: 'class-photo', label: 'Foto de la clase', icon: '📷' },
+  { id: 'class-photo', label: 'Foto grupal', icon: '📷' },
 ]
 const demoAccounts = [
   { id: 'student-mariano', label: 'Estudiante · Mariano Arias Simone', role: 'student' },
-  { id: 'student-nahuel', label: 'Estudiante · Peralta Herrera Nahuel', role: 'student' },
-  { id: 'teacher-marcelo', label: 'Profesor · Marcelo Roldan', role: 'teacher' },
-  { id: 'admin-academic', label: 'Institución · Administración académica', role: 'institutional' },
-  { id: 'admin-library', label: 'Institución · Biblioteca', role: 'institutional' },
-  { id: 'admin-gym', label: 'Institución · Gimnasio', role: 'institutional' },
+  { id: 'student-nahuel', label: 'Estudiante · Nahuel Peralta Herrera', role: 'student' },
+  { id: 'teacher-marcelo', label: 'Docente · Marcelo Roldán', role: 'teacher' },
+  { id: 'admin-academic', label: 'Gestión Institucional · Área Académica', role: 'institutional' },
+  { id: 'admin-library', label: 'Servicios Universitarios · Biblioteca', role: 'institutional' },
+  { id: 'admin-gym', label: 'Servicios Universitarios · Gimnasio', role: 'institutional' },
 ]
 const iconFor = (kind: CredentialKind) => ({
   'Alumno regular': '🎓',
@@ -205,14 +205,14 @@ function SouvenirQrDisplay({ value }: { value: string }) {
         <div className="souvenir-corner-star tr">✦</div>
         <div className="souvenir-corner-star bl">✦</div>
         <div className="souvenir-corner-star br">✦</div>
-        {image ? <img src={image} alt="Código QR del souvenir personalizado" /> : <span className="souvenir-placeholder-star">✦</span>}
+        {image ? <img src={image} alt="Código QR conmemorativo para el grupo" /> : <span className="souvenir-placeholder-star">✦</span>}
       </div>
-      <strong>Escaneá el QR con tu billetera para recibir tu recuerdo</strong>
+      <strong>Escaneá este código QR con tu billetera para recibir tu recuerdo</strong>
     </div>
   )
 }
 
-function LoadingMark({ label = 'Cargando' }: { label?: string }) {
+function LoadingMark({ label = 'Cargando…' }: { label?: string }) {
   return <span className="loading-mark" role="status" aria-label={label}><i />{label}</span>
 }
 
@@ -220,9 +220,9 @@ function QrScanner({ onScan, onClose }: { onScan: (value: string) => void; onClo
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState('')
   const browserError = !window.isSecureContext
-    ? 'La cámara requiere HTTPS. Abrí el sistema por el enlace seguro para escanear desde Android.'
+    ? 'El acceso a la cámara requiere una conexión segura (HTTPS). Abrí el enlace seguro provisto para escanear.'
     : !navigator.mediaDevices?.getUserMedia
-      ? 'Este navegador no permite acceder a la cámara. Probá con Chrome actualizado.'
+      ? 'Este navegador no tiene acceso a la cámara. Te sugerimos abrir la billetera en Google Chrome o Safari.'
       : ''
   useEffect(() => {
     let controls: { stop: () => void } | undefined
@@ -235,7 +235,7 @@ function QrScanner({ onScan, onClose }: { onScan: (value: string) => void; onClo
           controls = nextControls
           if (result && !cancelled) { cancelled = true; nextControls.stop(); onScan(result.getText()) }
         })
-      }).then((value) => { if (value) controls = value }).catch(() => setError('No se pudo abrir la cámara. Revisá el permiso del navegador e intentá nuevamente.'))
+      }).then((value) => { if (value) controls = value }).catch(() => setError('No se pudo acceder a la cámara. Verificá los permisos del navegador e intentá nuevamente.'))
     }
     return () => { cancelled = true; controls?.stop() }
   }, [browserError, onScan])
@@ -244,10 +244,10 @@ function QrScanner({ onScan, onClose }: { onScan: (value: string) => void; onClo
       <section className="scanner-modal" role="dialog" aria-modal="true" aria-label="Escanear código QR">
         <div className="scanner-heading">
           <div>
-            <p className="eyebrow">Billetera UNLaR</p>
-            <h2>Escanear QR</h2>
+            <p className="eyebrow">Lector de códigos</p>
+            <h2>Escanear código QR</h2>
           </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Cerrar">×</button>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Cerrar escáner">×</button>
         </div>
         <div className="scanner-video-wrapper">
           <video ref={videoRef} className="scanner-video" muted playsInline />
@@ -260,7 +260,7 @@ function QrScanner({ onScan, onClose }: { onScan: (value: string) => void; onClo
           </div>
         </div>
         {(error || browserError) && <p className="scanner-error">{error || browserError}</p>}
-        <p className="muted" style={{ marginTop: 12 }}>Apuntá la cámara al código que muestra el otro dispositivo.</p>
+        <p className="muted" style={{ marginTop: 12 }}>Apuntá la cámara al código QR que se muestra en la otra pantalla.</p>
       </section>
     </div>
   )
@@ -285,7 +285,7 @@ function App() {
   const [serverCredentials, setServerCredentials] = useState<IssuedCredential[]>([])
   const [issuerRefreshStatus, setIssuerRefreshStatus] = useState<'idle' | 'loading' | 'updated'>('idle')
   const [selectedCredentialId, setSelectedCredentialId] = useState('')
-  const [notice, setNotice] = useState('Tu billetera está lista. Escaneá un QR para recibir o presentar credenciales.')
+  const [notice, setNotice] = useState('Tu billetera está lista. Escaneá un código QR para recibir credenciales o registrar tu presencia.')
   const [credentialKind, setCredentialKind] = useState<CredentialKind>('Materia aprobada')
   const [subject, setSubject] = useState('Bases de Datos')
   const [grade, setGrade] = useState('')
@@ -312,7 +312,7 @@ function App() {
   const [studentName, setStudentName] = useState('')
   const [studentId, setStudentId] = useState('')
   const [recipientStudentId, setRecipientStudentId] = useState('mariano-arias-simone')
-  const [souvenirTitle, setSouvenirTitle] = useState('Souvenir · Seminario de Actualización II')
+  const [souvenirTitle, setSouvenirTitle] = useState('Seminario de Actualización II · Ciclo 2026')
   const [souvenirMessage, setSouvenirMessage] = useState('Gracias por participar de nuestro proyecto.')
   const [souvenirSession, setSouvenirSession] = useState<SouvenirSession | null>(null)
   const [souvenirQrOpen, setSouvenirQrOpen] = useState(false)
@@ -382,13 +382,13 @@ function App() {
       if (result.actor.scope === 'library') setCredentialKind('Biblioteca')
       else if (result.actor.scope === 'gym') setCredentialKind('Gimnasio')
       else setCredentialKind('Materia aprobada')
-    } catch (error) { setLoginError(error instanceof Error ? error.message : 'No se pudo iniciar sesión.') }
+    } catch (error) { setLoginError(error instanceof Error ? error.message : 'No se pudo iniciar sesión. Verificá tus credenciales e intentá nuevamente.') }
     finally { setLoginWorking(false) }
   }
 
   const registerGuest = async () => {
     const fullName = guestName.trim().replace(/\s+/g, ' ')
-    if (fullName.length < 2 || fullName.length > 100) { setGuestError('Escribí tu nombre y apellido.'); return }
+    if (fullName.length < 2 || fullName.length > 100) { setGuestError('Por favor, ingresá tu nombre y apellido completo.'); return }
     setLoginWorking(true)
     setGuestError('')
     try {
@@ -401,9 +401,9 @@ function App() {
       setStudentId(result.actor.studentId ?? '')
       setStudentName(result.actor.name)
       setActiveTab(result.actor.role === 'photographer' ? 'class-photo' : 'wallet')
-      setNotice(result.actor.role === 'photographer' ? 'Acceso de fotografía listo. Sacá la foto y guardala en la Mac.' : `Registro listo, ${result.actor.name}. Esta billetera quedó vinculada y ya podés marcar asistencia.`)
+      setNotice(result.actor.role === 'photographer' ? 'Acceso de fotografía listo. Tomá la foto grupal para guardarla en el sistema.' : `¡Billetera creada con éxito, ${result.actor.name}! Ya podés registrar asistencia y recibir credenciales.`)
       window.history.replaceState({}, '', window.location.pathname)
-    } catch (error) { setGuestError(error instanceof Error ? error.message : 'No se pudo completar el registro.') }
+    } catch (error) { setGuestError(error instanceof Error ? error.message : 'No se pudo completar el registro de la billetera.') }
     finally { setLoginWorking(false) }
   }
 
@@ -417,7 +417,7 @@ function App() {
     setStudentId(result.actor.studentId ?? '')
     setStudentName(result.actor.name)
     setActiveTab(result.actor.role === 'photographer' ? 'class-photo' : 'wallet')
-    setNotice(`Bienvenido/a nuevamente, ${result.actor.name}. Se recuperó la sesión de tu billetera.`)
+    setNotice(`Bienvenido/a nuevamente, ${result.actor.name}. Tu billetera se recuperó exitosamente.`)
   }
 
   const logout = () => {
@@ -477,14 +477,14 @@ function App() {
     try {
       await downloadFile('/api/attendance/export.csv', 'planilla-asistencia.csv')
     } catch (error) {
-      setAttendanceDownloadError(error instanceof Error ? error.message : 'No se pudo descargar la planilla.')
+      setAttendanceDownloadError(error instanceof Error ? error.message : 'No se pudo descargar la planilla de asistencia.')
     } finally {
       setAttendanceDownloadWorking(false)
     }
   }
 
   const resetDemo = async () => {
-    if (!window.confirm('¿Reiniciar la demo? Se borrarán invitados, foto de la clase, asistencias y credenciales. Solo quedarán Mariano y Nahuel.')) return
+    if (!window.confirm('¿Deseás reiniciar la demostración? Se restablecerán las asistencias, los registros temporales y las credenciales emitidas al estado inicial de prueba.')) return
     setResetWorking(true)
     try {
       await api('/api/demo/reset', { method: 'POST' })
@@ -492,8 +492,8 @@ function App() {
       setAttendanceRecords([])
       setQr(null)
       await Promise.all([refreshAttendanceRoster(), refreshStudents()])
-      setNotice('Demo reiniciada. Solo quedan Mariano y Nahuel; ya podés empezar otra prueba.')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo reiniciar la demo.') }
+      setNotice('La demostración se reinició correctamente. El sistema volvió al estado inicial de prueba.')
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo reiniciar la demostración.') }
     finally { setResetWorking(false) }
   }
 
@@ -597,33 +597,33 @@ function App() {
       })
       setStudentId(registered.id)
       setStudentName(registered.fullName)
-      setNotice(`Billetera vinculada a ${registered.fullName} · matrícula ${registered.enrollmentNumber}.`)
+      setNotice(`Billetera vinculada exitosamente a ${registered.fullName} (Matrícula: ${registered.enrollmentNumber}).`)
       await refreshStudents()
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudieron guardar los datos del estudiante.') }
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudieron guardar los datos del perfil estudiantil.') }
     finally { setWorking(false) }
   }
 
   const issueCredential = async () => {
     const parsedGrade = Number(grade)
     if (credentialKind === 'Regularidad' && !subject.trim()) {
-      setNotice('Ingresá la materia para emitir la regularidad.')
+      setNotice('Por favor, indicá el nombre de la materia para emitir la regularidad.')
       return
     }
     if (credentialKind === 'Nota de materia' && (!grade || !Number.isFinite(parsedGrade) || parsedGrade < 1 || parsedGrade > 10)) {
-      setNotice('Ingresá una nota entre 1 y 10 para emitir esta credencial.')
+      setNotice('Ingresá una calificación válida entre 1 y 10 para emitir esta credencial.')
       return
     }
     setWorking(true)
     try {
       const title = credentialKind === 'Alumno regular' ? 'Alumno regular' : credentialKind === 'Biblioteca' ? subject.trim() || 'Acceso a biblioteca' : credentialKind === 'Gimnasio' ? subject.trim() || 'Acceso al gimnasio' : subject.trim() || 'Materia sin especificar'
-      const detail = credentialKind === 'Alumno regular' ? 'Condición: alumno regular' : credentialKind === 'Regularidad' ? 'Condición: regular' : credentialKind === 'Materia aprobada' ? 'Condición: aprobada' : credentialKind === 'Nota de materia' ? `Nota: ${parsedGrade}` : 'Membresía activa'
+      const detail = credentialKind === 'Alumno regular' ? 'Condición: alumno regular' : credentialKind === 'Regularidad' ? 'Condición: regular' : credentialKind === 'Materia aprobada' ? 'Condición: materia aprobada' : credentialKind === 'Nota de materia' ? `Calificación final: ${parsedGrade}` : 'Membresía institucional activa'
       const selectedDays = validityPreset === 'custom' ? Number(validityDays) : validityPreset === 'never' ? undefined : Number(validityPreset)
-      if (selectedDays !== undefined && (!Number.isInteger(selectedDays) || selectedDays < 1 || selectedDays > 36500)) { setNotice('Indicá una vigencia en días entre 1 y 36500.'); return }
+      if (selectedDays !== undefined && (!Number.isInteger(selectedDays) || selectedDays < 1 || selectedDays > 36500)) { setNotice('Indicá una vigencia en días válida (entre 1 y 36.500 días).'); return }
       const response = await api<DeliveryResponse>('/api/credentials', { method: 'POST', body: JSON.stringify({ kind: credentialKind, title, detail, ...(credentialKind === 'Nota de materia' ? { grade: parsedGrade } : {}), studentId: recipientStudentId, ...(selectedDays !== undefined ? { validityDays: selectedDays } : {}) }) })
       const valid = await verifyCredential(response.credential, (await api<{ publicKeyPem: string }>('/api/issuer-key')).publicKeyPem)
-      if (!valid) throw new Error('El servidor emitió una credencial con firma inválida.')
-      setQr({ value: qrPayload('delivery', response.delivery.code), label: 'Escaneá para guardar esta credencial', expiresAt: response.delivery.expiresAt })
-      setNotice(`Credencial emitida y firmada por el servidor: ${title}. El QR vence en 10 minutos.`)
+      if (!valid) throw new Error('El servidor generó una firma digital inválida para la credencial.')
+      setQr({ value: qrPayload('delivery', response.delivery.code), label: 'Escanear para guardar credencial', expiresAt: response.delivery.expiresAt })
+      setNotice(`Credencial emitida y firmada oficialmente: «${title}». El código QR de entrega vencerá en 10 minutos.`)
       await refreshIssuer()
     } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo emitir la credencial.') }
     finally { setWorking(false) }
@@ -632,51 +632,51 @@ function App() {
   const revokeCredential = async (credential: IssuedCredential) => {
     try {
       await api(`/api/credentials/${credential.id}/revoke`, { method: 'POST' })
-      setNotice(`Credencial revocada: ${credential.title}. Los próximos intentos de verificación serán rechazados.`)
+      setNotice(`La credencial «${credential.title}» fue revocada exitosamente. Las futuras verificaciones serán rechazadas.`)
       await refreshIssuer()
       await refreshWallet()
     } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo revocar la credencial.') }
   }
 
   const deleteIssuedCredential = async (credential: IssuedCredential) => {
-    const confirmed = window.confirm(`¿Eliminar del registro del emisor “${credential.title}”? Se borrará también su QR de entrega. La copia que ya esté guardada en la billetera del estudiante no se borra desde acá y dejará de validarse en el registro.`)
+    const confirmed = window.confirm(`¿Eliminar la credencial «${credential.title}» del registro oficial? El código QR de entrega dejará de funcionar. La copia que el estudiante tenga en su teléfono dejará de figurar como activa en el registro.`)
     if (!confirmed) return
     setCredentialDeletingId(credential.id)
     try {
       await api(`/api/credentials/${credential.id}`, { method: 'DELETE' })
       setQr(null)
-      setNotice(`Credencial eliminada del registro: ${credential.title}.`)
+      setNotice(`La credencial «${credential.title}» fue eliminada del registro oficial.`)
       await refreshIssuer()
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo eliminar la credencial.') }
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo eliminar la credencial del registro.') }
     finally { setCredentialDeletingId('') }
   }
 
   const deleteWalletCredential = async (credential: WalletCredential) => {
     if (credential.localStatus === 'Activa') return
-    const confirmed = window.confirm(`¿Borrar “${credential.claims.titulo}” de esta billetera? Solo se elimina la copia guardada en este dispositivo.`)
+    const confirmed = window.confirm(`¿Eliminar «${credential.claims.titulo}» de esta billetera? Solo se borrará la copia almacenada en este dispositivo.`)
     if (!confirmed) return
     try {
       await removeWalletCredential(credential.id)
       const remaining = await listWalletCredentials()
       setCredentials(remaining)
       setSelectedCredentialId((current) => current === credential.id ? remaining[0]?.id ?? '' : current)
-      setNotice(`Se borró “${credential.claims.titulo}” de esta billetera.`)
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo borrar la credencial de esta billetera.') }
+      setNotice(`Se eliminó «${credential.claims.titulo}» de tu billetera.`)
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo eliminar la credencial de la billetera.') }
   }
 
   const createPresentationRequest = async () => {
     const courseCredential = ['Regularidad', 'Materia aprobada', 'Nota de materia'].includes(requestedKind)
     const parsedMinimumGrade = requestedMinimumGrade ? Number(requestedMinimumGrade) : undefined
-    if (requestedSubject.trim().length > 120) { setNotice('La materia debe tener como máximo 120 caracteres.'); return }
-    if (requestedKind === 'Nota de materia' && parsedMinimumGrade !== undefined && (!Number.isFinite(parsedMinimumGrade) || parsedMinimumGrade < 1 || parsedMinimumGrade > 10)) { setNotice('La nota mínima debe estar entre 1 y 10.'); return }
-    if (requestNote.trim().length > 300) { setNotice('El detalle debe tener como máximo 300 caracteres.'); return }
+    if (requestedSubject.trim().length > 120) { setNotice('El nombre de la materia no puede superar los 120 caracteres.'); return }
+    if (requestedKind === 'Nota de materia' && parsedMinimumGrade !== undefined && (!Number.isFinite(parsedMinimumGrade) || parsedMinimumGrade < 1 || parsedMinimumGrade > 10)) { setNotice('La calificación mínima debe ser un número entre 1 y 10.'); return }
+    if (requestNote.trim().length > 300) { setNotice('El detalle de la solicitud no puede superar los 300 caracteres.'); return }
     setWorking(true)
     try {
       const request = await api<VerifyRequest>('/api/presentation-requests', { method: 'POST', body: JSON.stringify({ kind: requestedKind, ...(courseCredential && requestedSubject.trim() ? { subject: requestedSubject.trim() } : {}), ...(requestedKind === 'Nota de materia' && parsedMinimumGrade !== undefined ? { minimumGrade: parsedMinimumGrade } : {}), ...(requestNote.trim() ? { requestNote: requestNote.trim() } : {}), requiredClaims: [...(requestName ? ['nombreEstudiante'] : []), ...(requestEnrollment ? ['matricula'] : []), ...(requestExactGrade ? ['nota'] : [])], includeExactGrade: requestExactGrade, minutes: 5 }) })
-      setQr({ value: qrPayload('verify', request.code), label: `Solicitud de ${request.kind} · un solo uso`, expiresAt: request.expiresAt })
+      setQr({ value: qrPayload('verify', request.code), label: `Solicitud de ${request.kind} · Un solo uso`, expiresAt: request.expiresAt })
       setVerifyResult(null)
-      setNotice('Solicitud creada. El resultado aparecerá automáticamente cuando el titular responda desde su billetera.')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo crear la solicitud.') }
+      setNotice('Solicitud de verificación generada. El resultado se mostrará automáticamente cuando el titular autorice la presentación.')
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo generar la solicitud de verificación.') }
     finally { setWorking(false) }
   }
 
@@ -686,30 +686,30 @@ function App() {
       const session = await api<AttendanceSession>('/api/attendance/sessions', { method: 'POST', body: JSON.stringify({ subject: attendanceSubject.trim() || 'Seminario de Actualización II', section: 'Comisión A', minutes: 1 }) })
       setAttendance(session)
       setAttendanceRecords([])
-      setQr({ value: qrPayload('attendance', session.id), label: 'QR de asistencia · vence en 1 minuto', expiresAt: session.expiresAt })
-      setNotice(`Asistencia abierta para ${session.subject}. El QR expira a los ${formatDate(session.expiresAt)}.`)
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo abrir la asistencia.') }
+      setQr({ value: qrPayload('attendance', session.id), label: 'Asistencia presencial · Válido por 1 minuto', expiresAt: session.expiresAt })
+      setNotice(`Toma de asistencia iniciada para ${session.subject}. El código QR vencerá a las ${formatDate(session.expiresAt)}.`)
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo iniciar la toma de asistencia.') }
     finally { setWorking(false) }
   }
 
   const createSouvenirSession = async () => {
-    if (!souvenirTitle.trim() || !souvenirMessage.trim()) { setNotice('Completá el título y el mensaje del souvenir.'); return }
+    if (!souvenirTitle.trim() || !souvenirMessage.trim()) { setNotice('Por favor, completá el título y la dedicatoria del recuerdo conmemorativo.'); return }
     setWorking(true)
     try {
       const photoStatus = await api<{ available: boolean }>('/api/rewards/class-photo')
-      if (!photoStatus.available) throw new Error('Primero guardá la foto de la clase desde el celular fotografo.')
+      if (!photoStatus.available) throw new Error('Primero debés cargar la fotografía de la clase desde la pestaña «Foto grupal».')
       const session = await api<SouvenirSession>('/api/rewards/sessions', { method: 'POST', body: JSON.stringify({ title: souvenirTitle.trim(), detail: souvenirMessage.trim() }) })
       setSouvenirSession(session)
       setSouvenirQrOpen(true)
-      setNotice('QR general creado. Cada participante recibirá una imagen personalizada al escanearlo desde su billetera.')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo generar el QR general.') }
+      setNotice('Código QR conmemorativo generado. Los participantes recibirán su recuerdo personalizado al escanearlo.')
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo generar el código QR conmemorativo.') }
     finally { setWorking(false) }
   }
 
   const saveClassPhoto = async (file?: File) => {
     if (!file) return
     setClassPhotoWorking(true)
-    setNotice('Preparando la foto para guardarla en la Mac…')
+    setNotice('Optimizando la fotografía y guardándola en el sistema…')
     try {
       const bitmap = await createImageBitmap(file)
       const scale = Math.min(1, 1800 / bitmap.width, 1400 / bitmap.height)
@@ -717,66 +717,66 @@ function App() {
       canvas.width = Math.round(bitmap.width * scale)
       canvas.height = Math.round(bitmap.height * scale)
       const context = canvas.getContext('2d')
-      if (!context) throw new Error('No se pudo preparar la foto en este teléfono.')
+      if (!context) throw new Error('No se pudo procesar la fotografía en este dispositivo.')
       context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
       bitmap.close()
       const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
-      if (dataUrl.length > 4_100_000) throw new Error('La foto quedó muy pesada. Elegí otra o tomala con menor resolución.')
+      if (dataUrl.length > 4_100_000) throw new Error('La imagen seleccionada es demasiado pesada. Seleccioná una imagen más liviana o con menor resolución.')
       setClassPhotoPreview(dataUrl)
       const result = await api<{ saved: boolean; updatedAt: string }>('/api/rewards/class-photo', { method: 'POST', body: JSON.stringify({ dataUrl }) })
       setClassPhotoStatus(true)
       setClassPhotoSavedAt(result.updatedAt)
-      setNotice('Foto guardada en la Mac. Ya aparecerá en los souvenirs personalizados.')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo guardar la foto en la Mac.') }
+      setNotice('Fotografía grupal guardada con éxito. Ya está disponible para los recuerdos conmemorativos.')
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo guardar la fotografía en el sistema.') }
     finally { setClassPhotoWorking(false) }
   }
 
   const handleScan = useCallback(async (value: string) => {
     setScannerOpen(false)
     const match = /^unlar-wallet:(delivery|verify|attendance|souvenir):([A-Za-z0-9_-]+)$/.exec(value.trim())
-    if (!match) { setNotice('El QR no pertenece a esta billetera.'); return }
+    if (!match) { setNotice('El código QR escaneado no corresponde a una credencial o sesión válida de esta billetera.'); return }
     const [, type, code] = match
     setWorking(true)
     try {
       if (type === 'delivery') {
-        if (!studentId || !savedStudent) throw new Error('Iniciá sesión con el perfil de estudiante destinatario antes de recibir la credencial.')
+        if (!studentId || !savedStudent) throw new Error('Debés iniciar sesión con tu perfil de estudiante antes de recibir una credencial.')
         const holder = `did:unlar:student:${studentId}`
         const bindingProof = await signWalletProof(`claim.${code}.${holder}`)
         const response = await api<{ credential: SignedCredential }>(`/api/deliveries/${code}/claim`, { method: 'POST', body: JSON.stringify(bindingProof) })
         const key = await api<{ publicKeyPem: string }>('/api/issuer-key')
-        if (!(await verifyCredential(response.credential, key.publicKeyPem))) throw new Error('La firma del emisor no es válida. La credencial no se guardó.')
+        if (!(await verifyCredential(response.credential, key.publicKeyPem))) throw new Error('La firma digital del emisor no es válida. La credencial no se guardó por seguridad.')
         await storeWalletCredential(response.credential)
         await refreshWallet()
         setActiveTab('wallet')
-        setNotice(`Credencial verificada y guardada en este celular: ${response.credential.claims.titulo}.`)
+        setNotice(`¡Credencial validada y guardada con éxito!: «${response.credential.claims.titulo}».`)
       } else if (type === 'souvenir') {
-        if (!studentId || !savedStudent) throw new Error('Registrate o iniciá sesión en tu billetera antes de reclamar el souvenir.')
+        if (!studentId || !savedStudent) throw new Error('Debés registrarte o iniciar sesión en tu billetera antes de reclamar tu recuerdo.')
         const photo = await api<{ dataUrl: string }>('/api/rewards/class-photo/image')
         const holder = `did:unlar:student:${studentId}`
         const proof = await signWalletProof(`reward-claim.${code}.${holder}`)
         const response = await api<{ credential: SignedCredential; alreadyClaimed?: boolean }>(`/api/rewards/${code}/claim`, { method: 'POST', body: JSON.stringify(proof) })
         const key = await api<{ publicKeyPem: string }>('/api/issuer-key')
-        if (!(await verifyCredential(response.credential, key.publicKeyPem))) throw new Error('La firma del souvenir no es válida; no se guardó en la billetera.')
+        if (!(await verifyCredential(response.credential, key.publicKeyPem))) throw new Error('La firma digital del recuerdo no es válida. No se guardó en la billetera.')
         await storeWalletCredential(response.credential)
         await refreshWallet()
         const image = await createSouvenirImage(response.credential.claims.nombreEstudiante ?? savedStudent.fullName, response.credential.claims.titulo, response.credential.claims.detalle, code, photo.dataUrl)
         setSouvenirPreview({ image, name: response.credential.claims.nombreEstudiante ?? savedStudent.fullName })
         setActiveTab('wallet')
-        setNotice(response.alreadyClaimed ? 'Ya tenías este souvenir. Acá está tu recuerdo personalizado.' : '¡Tu souvenir personalizado ya está en tu billetera!')
+        setNotice(response.alreadyClaimed ? 'Tu recuerdo conmemorativo ya estaba guardado en tu billetera. Acá podés volver a verlo y descargarlo.' : '¡Felicitaciones! Tu recuerdo personalizado ya se encuentra en tu billetera.')
       } else if (type === 'verify') {
         const request = await api<VerifyRequest>(`/api/presentation-requests/${code}`)
         setVerifyShareError('')
         setPendingVerify(request)
         setShareFields(Object.fromEntries([...(request.requiredClaims ?? []), ...(request.subject ? ['materia'] : []), ...(request.minimumGrade != null ? [`cumpleNotaMinima${request.minimumGrade}`] : [])].map((key) => [key, true])))
         setActiveTab('wallet')
-        setNotice(`El verificador solicita ${request.kind}. Revisá los datos y confirmá si querés compartirlos.`)
+        setNotice(`Solicitud de presentación recibida para «${request.kind}». Seleccioná qué datos querés compartir y confirmá.`)
       } else {
         const session = await api<AttendanceSession>(`/api/attendance/sessions/${code}`)
         setPendingAttendance(session)
         setActiveTab('wallet')
-        setNotice(`El profesor solicita registrar asistencia en ${session.subject}. Confirmá para enviar la prueba de tu billetera.`)
+        setNotice(`El docente solicita registrar tu asistencia en «${session.subject}». Confirmá para acreditar tu presencia.`)
       }
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo procesar el QR.') }
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo procesar el código QR.') }
     finally { setWorking(false) }
   }, [refreshWallet, savedStudent, studentId])
 
@@ -797,11 +797,11 @@ function App() {
         await navigator.share({ files: [file], title: 'Mi recuerdo UNLaR', text: '¡Gracias por participar de nuestro proyecto!' })
       } else {
         downloadSouvenir()
-        setNotice('La imagen se descargó. Ya podés adjuntarla en WhatsApp, Instagram u otra app.')
+        setNotice('La imagen se descargó en tu dispositivo. Ya podés adjuntarla en WhatsApp, Instagram u otra aplicación.')
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return
-      setNotice('No se pudo abrir el menú para compartir. Descargá la imagen para enviarla desde tu app favorita.')
+      setNotice('No se pudo abrir el menú nativo para compartir. Descargá la imagen para enviarla manualmente.')
     }
   }
 
@@ -817,13 +817,13 @@ function App() {
       await api(`/api/presentation-requests/${pendingVerify.code}/respond`, { method: 'POST', body: JSON.stringify({ credential: { ...credential, claims }, ...proof }) })
       setPendingVerify(null)
       setVerifyShareError('')
-      setNotice(`Presentación enviada al verificador: ${credential.claims.titulo}.`)
+      setNotice(`Presentación compartida exitosamente con el verificador: «${credential.claims.titulo}».`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo presentar la credencial.'
       if (/revocada/i.test(message)) {
         await refreshWallet()
         setPendingVerify(null)
-        setNotice(`El emisor revocó “${credential.claims.titulo}”. Se actualizó su estado y no se compartió.`)
+        setNotice(`El emisor oficial revocó la credencial «${credential.claims.titulo}». Se actualizó su estado y no fue compartida.`)
       } else {
         setVerifyShareError(message)
         setNotice(message)
@@ -835,7 +835,7 @@ function App() {
   const confirmAttendance = async () => {
     if (!pendingAttendance) return
     if (!studentId || savedStudent?.fullName !== studentName.trim()) {
-      setNotice('Primero completá y guardá tus datos de estudiante en Mi billetera.')
+      setNotice('Completá y vinculá tus datos de estudiante en «Mi billetera» antes de confirmar asistencia.')
       setPendingAttendance(null)
       return
     }
@@ -845,7 +845,7 @@ function App() {
       const proof = await signWalletProof(`attendance.${pendingAttendance.id}.${studentId}`)
       await api(`/api/attendance/sessions/${pendingAttendance.id}/check-in`, { method: 'POST', body: JSON.stringify({ studentId, ...proof }) })
       setPendingAttendance(null)
-      setNotice(`Asistencia registrada para ${pendingAttendance.subject}.`)
+      setNotice(`¡Asistencia registrada con éxito en ${pendingAttendance.subject}!`)
       await refreshAttendanceRoster()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo registrar la asistencia.'
@@ -859,7 +859,7 @@ function App() {
     if (!qr || !qr.value.includes(':verify:')) return
     if (Date.parse(qr.expiresAt) <= Date.now()) {
       setQr(null)
-      setNotice('La solicitud venció. Generá un QR nuevo para verificar otra credencial.')
+      setNotice('La solicitud de verificación expiró. Generá un nuevo código QR para continuar.')
       return
     }
     const code = qr.value.split(':').at(-1)
@@ -868,9 +868,9 @@ function App() {
       if (response.result) {
         setVerifyResult(response.result)
         const holder = response.result.studentName ? ` · ${response.result.studentName}` : ''
-        setNotice(`Credencial válida: ${response.result.title} · firma, vigencia, titular y estado verificados${holder}.`)
+        setNotice(`Credencial verificada con éxito: ${response.result.title}. Firma oficial, vigencia y titularidad acreditadas${holder}.`)
       }
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo consultar el resultado.') }
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo consultar el resultado de la verificación.') }
   }, [qr])
 
   useEffect(() => {
@@ -886,8 +886,8 @@ function App() {
       await api(`/api/attendance/sessions/${attendance.id}/close`, { method: 'POST' })
       setAttendance({ ...attendance, status: 'Cerrada' })
       setQr(null)
-      setNotice(`Asistencia cerrada. Registros recibidos: ${attendanceRecords.length}.`)
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo cerrar la asistencia.') }
+      setNotice(`Sesión de asistencia finalizada. Total de presencias registradas: ${attendanceRecords.length}.`)
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo finalizar la sesión de asistencia.') }
   }
 
   if (!actor && sessionChecking) {
@@ -899,7 +899,7 @@ function App() {
           </button>
         </header>
         <section className="login-card">
-          <LoadingMark label="Recuperando tu billetera criptográfica…" />
+          <LoadingMark label="Accediendo a tu billetera digital…" />
         </section>
       </main>
     )
@@ -916,9 +916,9 @@ function App() {
         <section className="login-card">
           <p className="eyebrow">Acceso institucional y docente</p>
           <h1>Iniciar sesión</h1>
-          <p className="muted">Elegí el perfil docente o de área institucional para administrar la jornada y emitir credenciales.</p>
+          <p className="muted">Seleccioná tu perfil docente o de área institucional para administrar la jornada y emitir credenciales oficiales.</p>
           <label>
-            Perfil
+            Perfil institucional
             <select value={loginAccount} onChange={(event) => setLoginAccount(event.target.value)}>
               {demoAccounts.filter((account) => account.role !== 'student').map((account) => (
                 <option value={account.id} key={account.id}>{account.label}</option>
@@ -926,7 +926,7 @@ function App() {
             </select>
           </label>
           <label>
-            Contraseña de laboratorio
+            Contraseña de acceso
             <input
               type="password"
               value={loginPassword}
@@ -940,7 +940,7 @@ function App() {
             {loginWorking ? 'Ingresando…' : 'Ingresar al sistema'}
           </button>
         </section>
-        <footer>Universidad Nacional de La Rioja · Billetera Universitaria Verificable</footer>
+        <footer>Universidad Nacional de La Rioja · Billetera Universitaria Digital</footer>
       </main>
     )
   }
@@ -954,20 +954,20 @@ function App() {
           </button>
         </header>
         <section className="login-card guest-register-card">
-          <p className="eyebrow">Asistente · Registro inmediato</p>
+          <p className="eyebrow">Participante · Registro inmediato</p>
           <h1>Tu Billetera Universitaria</h1>
           {guestAlreadyRegistered ? (
             <>
-              <p className="muted">Este navegador ya se registró para la demo. Tu billetera y tu nombre quedaron guardados en este dispositivo con claves criptográficas Ed25519.</p>
-              <p className="muted">Volvé a la pantalla principal de la billetera para continuar. No es posible crear otro registro desde este navegador.</p>
+              <p className="muted">Este navegador ya cuenta con una billetera registrada a tu nombre con claves criptográficas seguras.</p>
+              <p className="muted">Accedé a tu billetera para recibir credenciales, marcar asistencia y descargar tu recuerdo de la jornada.</p>
               {guestRestoreError && <p className="scanner-error" role="alert">No se pudo recuperar la billetera: {guestRestoreError}</p>}
-              <button type="button" className="primary-button" onClick={goToMainPage}>Ir a mi billetera</button>
+              <button type="button" className="primary-button" onClick={goToMainPage}>Abrir mi billetera</button>
             </>
           ) : (
             <>
-              <p className="muted">Escribí tu nombre y apellido. Se generará un par de claves en este dispositivo y quedará vinculado para registrar asistencia y recibir credenciales verificables.</p>
+              <p className="muted">Ingresá tu nombre y apellido para crear tu billetera en este dispositivo. Te permitirá recibir credenciales oficiales, registrar asistencia presencial y guardar tu recuerdo.</p>
               <label>
-                Nombre y apellido
+                Nombre y apellido completo
                 <input
                   autoComplete="name"
                   value={guestName}
@@ -980,13 +980,13 @@ function App() {
               {guestError && <p className="scanner-error" role="alert">{guestError}</p>}
               <button type="button" className="primary-button" onClick={() => void registerGuest()} disabled={loginWorking}>
                 {loginWorking && <span className="button-spinner" />}
-                {loginWorking ? 'Creando claves y billetera…' : 'Crear mi billetera digital'}
+                {loginWorking ? 'Creando claves seguras…' : 'Crear mi billetera digital'}
               </button>
-              <p className="muted" style={{ fontSize: '0.8rem' }}>La billetera se guarda localmente en IndexedDB. Usá este mismo dispositivo para presentar credenciales o recibir tu souvenir.</p>
+              <p className="muted" style={{ fontSize: '0.8rem' }}>Tus credenciales y claves se resguardan de forma privada en la memoria de este navegador.</p>
             </>
           )}
         </section>
-        <footer>Universidad Nacional de La Rioja · Credenciales digitales verificables</footer>
+        <footer>Universidad Nacional de La Rioja · Identidad digital soberana</footer>
       </main>
     )
   }
@@ -1013,12 +1013,12 @@ function App() {
             <strong className="user-name">{actor.name}</strong>
             <span className="user-role-badge">
               <i className="role-dot" />
-              {actor.role === 'student' ? 'Estudiante' : actor.role === 'photographer' ? 'Fotógrafo/a' : actor.role === 'teacher' ? 'Profesor' : `Institución · ${actor.scope === 'academic' ? 'Académica' : actor.scope === 'library' ? 'Biblioteca' : 'Gimnasio'}`}
+              {actor.role === 'student' ? 'Estudiante' : actor.role === 'photographer' ? 'Fotografía' : actor.role === 'teacher' ? 'Docente' : `Institución · ${actor.scope === 'academic' ? 'Gestión Académica' : actor.scope === 'library' ? 'Biblioteca' : 'Gimnasio'}`}
             </span>
           </div>
           {actor.role !== 'student' && (
-            <button type="button" className="secondary-button switch-user-button" onClick={logout} title="Cambiar usuario o cerrar sesión">
-              Cambiar
+            <button type="button" className="secondary-button switch-user-button" onClick={logout} title="Cambiar de usuario o cerrar sesión">
+              Cambiar perfil
             </button>
           )}
         </div>
@@ -1026,20 +1026,20 @@ function App() {
 
       <section className="hero">
         <div>
-          <p className="eyebrow">Billetera universitaria verificable</p>
-          <h1>Credenciales que compartís con control.</h1>
-          <p className="lead">Antecedentes académicos, servicios institucionales y asistencia en una misma billetera criptográfica.</p>
+          <p className="eyebrow">Billetera Universitaria Digital</p>
+          <h1>Tus credenciales universitarias, bajo tu control.</h1>
+          <p className="lead">Gestioná tus certificados académicos, accesos a servicios y registro de asistencia en una billetera digital segura y privada.</p>
         </div>
         <div className="trust-card">
           <span className="trust-icon" aria-hidden="true">🛡️</span>
           <div>
-            <strong>Privacidad por diseño</strong>
-            <p>Divulgación selectiva con firmas Ed25519.</p>
+            <strong>Privacidad y soberanía</strong>
+            <p>Tus datos se guardan en tu dispositivo. Vos elegís qué información compartir en cada verificación.</p>
           </div>
         </div>
       </section>
 
-      <nav className="tabs" aria-label="Módulos">
+      <nav className="tabs" aria-label="Módulos del sistema">
         {allowedTabs.map((tab) => (
           <button
             className={activeTab === tab.id ? 'tab active' : 'tab'}
@@ -1058,7 +1058,7 @@ function App() {
           {working ? <span className="inline-spinner" /> : noticeType === 'success' ? '✓' : noticeType === 'error' ? '!' : 'ℹ'}
         </div>
         <div className="notice-content">
-          <strong>{working ? 'Procesando…' : noticeType === 'success' ? 'Operación exitosa' : noticeType === 'error' ? 'Aviso' : 'Información'}</strong>
+          <strong>{working ? 'Procesando…' : noticeType === 'success' ? 'Operación exitosa' : noticeType === 'error' ? 'Atención' : 'Información'}</strong>
           <p>{notice}</p>
         </div>
       </div>
@@ -1068,7 +1068,7 @@ function App() {
           <div>
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Estudiante</p>
+                <p className="eyebrow">Espacio personal</p>
                 <h2>Mis credenciales</h2>
               </div>
               <span className="count">{credentials.length}</span>
@@ -1079,13 +1079,13 @@ function App() {
                 <p className="eyebrow" style={{ margin: 0 }}>Identidad del titular</p>
                 {savedStudent?.walletLinked && (
                   <span className="live-badge" style={{ padding: '3px 10px', fontSize: '0.72rem' }}>
-                    <i /> Vinculada
+                    <i /> Vinculada al sistema
                   </span>
                 )}
               </div>
               <div className="student-profile-grid">
-                <label>Nombre y apellido<input value={savedStudent?.fullName ?? actor.name} readOnly /></label>
-                <label>Matrícula<input value={savedStudent?.enrollmentNumber ?? 'Cargando…'} readOnly /></label>
+                <label>Titular de la billetera<input value={savedStudent?.fullName ?? actor.name} readOnly /></label>
+                <label>Número de matrícula<input value={savedStudent?.enrollmentNumber ?? 'Cargando matrícula…'} readOnly /></label>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <button
@@ -1097,16 +1097,16 @@ function App() {
                   {!savedStudent ? <><span className="button-spinner" /> Cargando perfil…</> : savedStudent.walletLinked ? '✓ Billetera vinculada' : 'Vincular esta billetera'}
                 </button>
                 <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
-                  La firma criptográfica asocia de forma inmutable la billetera con el perfil estudiantil.
+                  La vinculación asocia criptográficamente tu billetera con tus registros académicos de forma segura y privada.
                 </p>
               </div>
             </div>
 
             <div className="wallet-actions">
               <button type="button" className="primary-button" onClick={() => setScannerOpen(true)}>
-                <span>📷</span> Escanear QR con la cámara
+                <span>📷</span> Escanear código QR
               </button>
-              <span className="muted">Las credenciales se guardan protegidas en este teléfono.</span>
+              <span className="muted">Tus credenciales se resguardan de forma segura en este dispositivo.</span>
             </div>
 
             {credentials.length ? (
@@ -1120,7 +1120,7 @@ function App() {
                     >
                       <div className="card-chip-strip">
                         <div className="card-chip"><div className="chip-line" /></div>
-                        <span className="card-institution">UNLaR · CREDENCIAL DIGITAL</span>
+                        <span className="card-institution">UNLaR · CREDENCIAL DIGITAL VERIFICABLE</span>
                         <span className="card-kind-badge">{iconFor(credential.type as CredentialKind)} {credential.type}</span>
                       </div>
                       <div className="card-body">
@@ -1137,7 +1137,7 @@ function App() {
                       </div>
                       <div className="card-footer">
                         <div className="card-holder-info">
-                          <small className="card-holder-label">TITULAR FIRMADO</small>
+                          <small className="card-holder-label">TITULAR ACREDITADO</small>
                           <span className="card-holder-name">{credential.claims.nombreEstudiante ?? savedStudent?.fullName ?? actor.name}</span>
                           {credential.claims.matricula && (
                             <span className="card-holder-matricula">Mat. {credential.claims.matricula}</span>
@@ -1153,8 +1153,8 @@ function App() {
                       <button
                         type="button"
                         className="trash-icon-button"
-                        aria-label={`Borrar ${credential.claims.titulo} de la billetera`}
-                        title="Borrar de la billetera"
+                        aria-label={`Eliminar «${credential.claims.titulo}» de esta billetera`}
+                        title="Eliminar de esta billetera"
                         onClick={() => void deleteWalletCredential(credential)}
                       >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1168,8 +1168,8 @@ function App() {
             ) : (
               <div className="empty-state">
                 <span className="empty-icon">🪪</span>
-                <h3>Tu billetera está vacía</h3>
-                <p>Para agregar una credencial, escaneá con tu cámara el QR de entrega que te comparta el emisor institucional.</p>
+                <h3>Todavía no tenés credenciales guardadas</h3>
+                <p>Cuando la institución o un docente emita un certificado oficial, escaneá el código QR de entrega para guardarlo en este dispositivo.</p>
               </div>
             )}
           </div>
@@ -1178,70 +1178,698 @@ function App() {
             {selectedCredential ? (
               <>
                 <div className="security-verified-badge">
-                  <span>🛡️</span> Criptografía Ed25519 verificada
+                  <span>🛡️</span> Firma digital Ed25519 verificada
                 </div>
                 <p className="eyebrow">{selectedCredential.type}</p>
                 <h2>{selectedCredential.claims.titulo}</h2>
                 <p className="detail-copy">{selectedCredential.claims.detalle}</p>
                 <dl>
-                  <div><dt>Emisor institucional</dt><dd>Universidad Nacional de La Rioja</dd></div>
+                  <div><dt>Entidad emisora</dt><dd>Universidad Nacional de La Rioja</dd></div>
                   <div><dt>Fecha de emisión</dt><dd>{formatDate(selectedCredential.issuedAt)}</dd></div>
-                  <div><dt>Vigencia</dt><dd>{selectedCredential.expiresAt ? formatDate(selectedCredential.expiresAt) : 'Sin vencimiento'}</dd></div>
-                  <div><dt>Titular firmado</dt><dd>{selectedCredential.claims.nombreEstudiante ?? 'Perfil vinculado'}</dd></div>
-                  {selectedCredential.claims.matricula && <div><dt>Matrícula</dt><dd>{selectedCredential.claims.matricula}</dd></div>}
-                  <div><dt>Algoritmo</dt><dd>{selectedCredential.proof.algorithm} (EdDSA)</dd></div>
-                  <div><dt>Estado en registro</dt><dd>{selectedCredential.localStatus}</dd></div>
+                  <div><dt>Período de vigencia</dt><dd>{selectedCredential.expiresAt ? formatDate(selectedCredential.expiresAt) : 'Permanente (sin vencimiento)'}</dd></div>
+                  <div><dt>Titular acreditado</dt><dd>{selectedCredential.claims.nombreEstudiante ?? 'Perfil vinculado'}</dd></div>
+                  {selectedCredential.claims.matricula && <div><dt>Número de matrícula</dt><dd>{selectedCredential.claims.matricula}</dd></div>}
+                  <div><dt>Seguridad criptográfica</dt><dd>{selectedCredential.proof.algorithm} (EdDSA)</dd></div>
+                  <div><dt>Estado en registro oficial</dt><dd>{selectedCredential.localStatus}</dd></div>
                 </dl>
               </>
             ) : (
               <>
-                <p className="eyebrow">Tu espacio personal</p>
-                <h2>Guardá credenciales emitidas por la universidad</h2>
-                <p className="detail-copy">Cada QR de entrega es de un solo uso y vence a los diez minutos.</p>
+                <p className="eyebrow">Espacio personal</p>
+                <h2>Credenciales verificables seguras</h2>
+                <p className="detail-copy">Tus constancias académicas cuentan con firma digital institucional y podés presentarlas de forma privada y directa.</p>
               </>
             )}
           </aside>
         </section>
       )}
 
-      {activeTab === 'issuer' && <section className="layout issuer-layout"><div className="panel form-panel"><p className="eyebrow">Panel institucional · {actor.scope === 'academic' ? 'Área académica' : actor.scope === 'library' ? 'Biblioteca' : 'Gimnasio'}</p><h2>Emitir una credencial</h2><p className="muted">El servidor firma con Ed25519. Este usuario solo puede emitir dentro de su área; la credencial incluye la identidad del estudiante.</p><div className="form-grid"><label>Estudiante destinatario<select value={recipientStudentId} onChange={(event) => setRecipientStudentId(event.target.value)}>{demoStudents.map((student) => <option value={student.id} key={student.id}>{student.fullName} · {student.enrollmentNumber}</option>)}</select></label><label>Tipo de credencial<select value={credentialKind} onChange={(event) => setCredentialKind(event.target.value as CredentialKind)}>{allowedKinds.map((kind) => <option key={kind}>{kind}</option>)}</select></label>{credentialKind !== 'Alumno regular' && <label>{credentialKind === 'Biblioteca' || credentialKind === 'Gimnasio' ? 'Servicio' : 'Materia'}<input value={credentialKind === 'Biblioteca' || credentialKind === 'Gimnasio' ? (subject === 'Bases de Datos' ? '' : subject) : subject} onChange={(event) => setSubject(event.target.value)} placeholder={credentialKind === 'Biblioteca' ? 'Servicio de biblioteca' : credentialKind === 'Gimnasio' ? 'Servicio de gimnasio' : 'Ej.: Bases de Datos'} /></label>}{credentialKind === 'Nota de materia' && <label>Nota (escala de 1 a 10)<input type="number" inputMode="decimal" min="1" max="10" step="0.01" value={grade} onChange={(event) => setGrade(event.target.value)} placeholder="Ej.: 8.50" required /></label>}<label>Vigencia<select value={validityPreset} onChange={(event) => setValidityPreset(event.target.value)}><option value="never">Sin vencimiento</option><option value="7">1 semana</option><option value="30">1 mes (30 días)</option><option value="90">3 meses (90 días)</option><option value="365">1 año (365 días)</option><option value="custom">Personalizada</option></select></label>{validityPreset === 'custom' && <label>Vigencia en días<input type="number" inputMode="numeric" min="1" max="36500" step="1" value={validityDays} onChange={(event) => setValidityDays(event.target.value)} placeholder="Ej.: 45" /></label>}</div><button type="button" className="primary-button" onClick={() => void issueCredential()} disabled={working || (credentialKind === 'Regularidad' && !subject.trim()) || (credentialKind === 'Nota de materia' && !grade) || (validityPreset === 'custom' && !validityDays)}>{working && <span className="button-spinner" />}{working ? 'Emitiendo…' : 'Emitir y generar QR'}</button></div>
-        <aside className="panel request-panel">{qr?.value.includes(':delivery:') ? <><QrDisplay value={qr.value} label={qr.label} /><h3>Entrega de credencial</h3><p>Vence: {formatDate(qr.expiresAt)}</p><button type="button" className="secondary-button" onClick={() => void refreshIssuer(true).catch((error) => setNotice(error instanceof Error ? error.message : 'No se pudieron actualizar las emisiones.'))} disabled={issuerRefreshStatus === 'loading'}>{issuerRefreshStatus === 'loading' ? <><span className="button-spinner" /> Actualizando…</> : issuerRefreshStatus === 'updated' ? 'Actualizado ✓' : 'Actualizar emisiones'}</button></> : <><span className="qr-placeholder">▦</span><h3>Entrega por QR</h3><p>El estudiante escanea el QR con su cámara y recibe la credencial firmada en su billetera local.</p></>}</aside>
-        <div className="panel issuer-records"><div className="section-heading"><div><p className="eyebrow">Registro del emisor</p><h2>Credenciales emitidas</h2></div><button type="button" className="secondary-button" onClick={() => void refreshIssuer(true).catch((error) => setNotice(error instanceof Error ? error.message : 'No se pudieron actualizar las emisiones.'))} disabled={issuerRefreshStatus === 'loading'}>{issuerRefreshStatus === 'loading' ? <><span className="button-spinner" /> Actualizando…</> : issuerRefreshStatus === 'updated' ? 'Actualizado ✓' : 'Actualizar'}</button></div>{serverCredentials.length ? <div className="credential-list">{serverCredentials.map((credential) => <div className="credential-card record-card" key={credential.id}><span className="credential-icon">{iconFor(credential.kind)}</span><span className="credential-copy"><small>{credential.kind}</small><strong>{credential.title}</strong><span>{credential.detail}</span>{credential.studentName && <small>Titular: {credential.studentName} · Matrícula {credential.enrollmentNumber}</small>}</span><span className={credential.status === 'Activa' ? 'status good' : 'status bad'}>{credential.status}</span>{credential.status === 'Activa' && <button type="button" className="danger-link" onClick={() => void revokeCredential(credential)}>Revocar</button>}<button type="button" className="trash-icon-button" aria-label={`Eliminar ${credential.title} del registro`} title="Eliminar credencial" disabled={credentialDeletingId === credential.id} onClick={() => void deleteIssuedCredential(credential)}>{credentialDeletingId === credential.id ? <span className="button-spinner" /> : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" /></svg>}</button></div>)}</div> : <p className="muted">Todavía no se emitieron credenciales.</p>}</div>
-      </section>}
+      {activeTab === 'issuer' && (
+        <section className="layout issuer-layout">
+          <div className="panel form-panel">
+            <p className="eyebrow">Gestión institucional · {actor.scope === 'academic' ? 'Área Académica' : actor.scope === 'library' ? 'Biblioteca Universitaria' : 'Área de Deportes'}</p>
+            <h2>Emitir credencial digital</h2>
+            <p className="muted">Las credenciales se firman digitalmente con la clave oficial de la universidad y quedan asociadas al perfil del estudiante.</p>
+            <div className="form-grid">
+              <label>
+                Estudiante destinatario
+                <select value={recipientStudentId} onChange={(event) => setRecipientStudentId(event.target.value)}>
+                  {demoStudents.map((student) => (
+                    <option value={student.id} key={student.id}>{student.fullName} · Matrícula: {student.enrollmentNumber}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Tipo de credencial
+                <select value={credentialKind} onChange={(event) => setCredentialKind(event.target.value as CredentialKind)}>
+                  {allowedKinds.map((kind) => <option key={kind}>{kind}</option>)}
+                </select>
+              </label>
+              {credentialKind !== 'Alumno regular' && (
+                <label>
+                  {credentialKind === 'Biblioteca' || credentialKind === 'Gimnasio' ? 'Servicio o beneficio' : 'Materia académica'}
+                  <input
+                    value={credentialKind === 'Biblioteca' || credentialKind === 'Gimnasio' ? (subject === 'Bases de Datos' ? '' : subject) : subject}
+                    onChange={(event) => setSubject(event.target.value)}
+                    placeholder={credentialKind === 'Biblioteca' ? 'Ej.: Préstamo bibliográfico regular' : credentialKind === 'Gimnasio' ? 'Ej.: Acceso a sala de musculación' : 'Ej.: Bases de Datos'}
+                  />
+                </label>
+              )}
+              {credentialKind === 'Nota de materia' && (
+                <label>
+                  Calificación (escala de 1 a 10)
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="1"
+                    max="10"
+                    step="0.01"
+                    value={grade}
+                    onChange={(event) => setGrade(event.target.value)}
+                    placeholder="Ej.: 8.50"
+                    required
+                  />
+                </label>
+              )}
+              <label>
+                Período de vigencia
+                <select value={validityPreset} onChange={(event) => setValidityPreset(event.target.value)}>
+                  <option value="never">Sin vencimiento (permanente)</option>
+                  <option value="7">1 semana (7 días)</option>
+                  <option value="30">1 mes (30 días)</option>
+                  <option value="90">3 meses (90 días)</option>
+                  <option value="365">1 año (365 días)</option>
+                  <option value="custom">Período personalizado…</option>
+                </select>
+              </label>
+              {validityPreset === 'custom' && (
+                <label>
+                  Duración de la vigencia (en días)
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    max="36500"
+                    step="1"
+                    value={validityDays}
+                    onChange={(event) => setValidityDays(event.target.value)}
+                    placeholder="Ej.: 45"
+                  />
+                </label>
+              )}
+            </div>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => void issueCredential()}
+              disabled={working || (credentialKind === 'Regularidad' && !subject.trim()) || (credentialKind === 'Nota de materia' && !grade) || (validityPreset === 'custom' && !validityDays)}
+            >
+              {working && <span className="button-spinner" />}
+              {working ? 'Firmando y emitiendo…' : 'Emitir y generar código QR'}
+            </button>
+          </div>
 
-      {activeTab === 'verify' && <section className="layout verify-layout">
-        <div className="panel"><p className="eyebrow">Verificador</p><h2>Solicitar evidencia</h2><p className="muted">El QR vence en cinco minutos. El resultado se actualiza automáticamente cuando el titular responde.</p>
-          <label>Tipo de credencial<select value={requestedKind} onChange={(event) => setRequestedKind(event.target.value as CredentialKind)}>{kinds.map((kind) => <option key={kind}>{kind}</option>)}</select></label>
-          {['Regularidad', 'Materia aprobada', 'Nota de materia'].includes(requestedKind) && <label>Materia específica (opcional)<input value={requestedSubject} onChange={(event) => setRequestedSubject(event.target.value)} maxLength={120} placeholder="Ej.: Bases de Datos" /></label>}
-          {requestedKind === 'Nota de materia' && <label>Nota mínima (opcional)<input type="number" inputMode="decimal" min="1" max="10" step="0.01" value={requestedMinimumGrade} onChange={(event) => setRequestedMinimumGrade(event.target.value)} placeholder="Ej.: 7" /></label>}
-          <fieldset className="disclosure-options"><legend>Datos que querés solicitar</legend><label><input type="checkbox" checked={requestName} onChange={(event) => setRequestName(event.target.checked)} /> Nombre</label><label><input type="checkbox" checked={requestEnrollment} onChange={(event) => setRequestEnrollment(event.target.checked)} /> Matrícula</label>{requestedKind === 'Nota de materia' && <label><input type="checkbox" checked={requestExactGrade} onChange={(event) => setRequestExactGrade(event.target.checked)} /> Nota exacta (si no, solo se informa si cumple la mínima)</label>}</fieldset>
-          <label>Detalle para el titular (opcional)<textarea rows={3} maxLength={300} value={requestNote} onChange={(event) => setRequestNote(event.target.value)} placeholder="Indicá el motivo o contexto de la solicitud" /></label>
-          <button type="button" className="primary-button" onClick={() => void createPresentationRequest()} disabled={working}>Generar QR de solicitud</button>
+          <aside className="panel request-panel">
+            {qr?.value.includes(':delivery:') ? (
+              <>
+                <QrDisplay value={qr.value} label={qr.label} />
+                <h3>Entrega de credencial</h3>
+                <p>Disponible hasta: {formatDate(qr.expiresAt)}</p>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => void refreshIssuer(true).catch((error) => setNotice(error instanceof Error ? error.message : 'No se pudieron actualizar las emisiones.'))}
+                  disabled={issuerRefreshStatus === 'loading'}
+                >
+                  {issuerRefreshStatus === 'loading' ? <><span className="button-spinner" /> Actualizando…</> : issuerRefreshStatus === 'updated' ? 'Actualizado ✓' : 'Actualizar registro'}
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="qr-placeholder">▦</span>
+                <h3>Entrega presencial por QR</h3>
+                <p>Al emitir la credencial, el estudiante escanea el código QR con su cámara para guardarla en su billetera digital.</p>
+              </>
+            )}
+          </aside>
 
+          <div className="panel issuer-records">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Registro oficial</p>
+                <h2>Credenciales emitidas</h2>
+              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void refreshIssuer(true).catch((error) => setNotice(error instanceof Error ? error.message : 'No se pudieron actualizar las emisiones.'))}
+                disabled={issuerRefreshStatus === 'loading'}
+              >
+                {issuerRefreshStatus === 'loading' ? <><span className="button-spinner" /> Actualizando…</> : issuerRefreshStatus === 'updated' ? 'Actualizado ✓' : 'Actualizar'}
+              </button>
+            </div>
+            {serverCredentials.length ? (
+              <div className="credential-list">
+                {serverCredentials.map((credential) => (
+                  <div className="credential-card record-card" key={credential.id}>
+                    <span className="credential-icon">{iconFor(credential.kind)}</span>
+                    <span className="credential-copy">
+                      <small>{credential.kind}</small>
+                      <strong>{credential.title}</strong>
+                      <span>{credential.detail}</span>
+                      {credential.studentName && <small>Titular: {credential.studentName} · Matrícula: {credential.enrollmentNumber}</small>}
+                    </span>
+                    <span className={credential.status === 'Activa' ? 'status good' : 'status bad'}>{credential.status}</span>
+                    {credential.status === 'Activa' && (
+                      <button type="button" className="danger-link" onClick={() => void revokeCredential(credential)}>
+                        Revocar
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="trash-icon-button"
+                      aria-label={`Eliminar la credencial «${credential.title}» del registro`}
+                      title="Eliminar credencial"
+                      disabled={credentialDeletingId === credential.id}
+                      onClick={() => void deleteIssuedCredential(credential)}
+                    >
+                      {credentialDeletingId === credential.id ? (
+                        <span className="button-spinner" />
+                      ) : (
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">Todavía no se han emitido credenciales en este panel.</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'verify' && (
+        <section className="layout verify-layout">
+          <div className="panel">
+            <p className="eyebrow">Verificador institucional</p>
+            <h2>Solicitar presentación</h2>
+            <p className="muted">El código QR es temporal (válido por 5 minutos). Cuando el estudiante responda desde su billetera, el resultado se mostrará en pantalla de forma automática.</p>
+            <label>
+              Tipo de credencial requerida
+              <select value={requestedKind} onChange={(event) => setRequestedKind(event.target.value as CredentialKind)}>
+                {kinds.map((kind) => <option key={kind}>{kind}</option>)}
+              </select>
+            </label>
+            {['Regularidad', 'Materia aprobada', 'Nota de materia'].includes(requestedKind) && (
+              <label>
+                Materia específica (opcional)
+                <input
+                  value={requestedSubject}
+                  onChange={(event) => setRequestedSubject(event.target.value)}
+                  maxLength={120}
+                  placeholder="Ej.: Bases de Datos"
+                />
+              </label>
+            )}
+            {requestedKind === 'Nota de materia' && (
+              <label>
+                Calificación mínima exigida (opcional)
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="1"
+                  max="10"
+                  step="0.01"
+                  value={requestedMinimumGrade}
+                  onChange={(event) => setRequestedMinimumGrade(event.target.value)}
+                  placeholder="Ej.: 7"
+                />
+              </label>
+            )}
+            <fieldset className="disclosure-options">
+              <legend>Datos específicos a solicitar al titular</legend>
+              <label>
+                <input type="checkbox" checked={requestName} onChange={(event) => setRequestName(event.target.checked)} />
+                Nombre y apellido
+              </label>
+              <label>
+                <input type="checkbox" checked={requestEnrollment} onChange={(event) => setRequestEnrollment(event.target.checked)} />
+                Número de matrícula
+              </label>
+              {requestedKind === 'Nota de materia' && (
+                <label>
+                  <input type="checkbox" checked={requestExactGrade} onChange={(event) => setRequestExactGrade(event.target.checked)} />
+                  Calificación exacta (si se desmarca, solo se comprueba si cumple la mínima)
+                </label>
+              )}
+            </fieldset>
+            <label>
+              Motivo o contexto de la solicitud (opcional)
+              <textarea
+                rows={3}
+                maxLength={300}
+                value={requestNote}
+                onChange={(event) => setRequestNote(event.target.value)}
+                placeholder="Indicá para qué trámite o requisito se solicita esta información"
+              />
+            </label>
+            <button type="button" className="primary-button" onClick={() => void createPresentationRequest()} disabled={working}>
+              {working && <span className="button-spinner" />}
+              {working ? 'Generando solicitud…' : 'Generar código QR de verificación'}
+            </button>
+          </div>
+
+          <aside className={`panel request-panel${verifyResult ? ' verify-result-panel' : ''}`}>
+            {qr?.value.includes(':verify:') ? (
+              <>
+                <QrDisplay value={qr.value} label={qr.label} />
+                <h3>Solicitud de verificación activa</h3>
+                <p>Disponible hasta: {formatDate(qr.expiresAt)}</p>
+                {verifyResult ? (
+                  <div className="verification-result">
+                    <span className="result-check">✓</span>
+                    <div>
+                      <strong>Credencial verificada con éxito</strong>
+                      <p>{verifyResult.studentName ? `${verifyResult.studentName} · ` : ''}{verifyResult.title} · {verifyResult.kind}</p>
+                      {(verifyResult.subject || verifyResult.grade || verifyResult.minimumGradeMet !== undefined) && (
+                        <small>
+                          {verifyResult.subject ? `Materia: ${verifyResult.subject}` : ''}
+                          {verifyResult.grade ? ` · Calificación: ${verifyResult.grade}` : verifyResult.minimumGradeMet !== undefined ? ` · Cumple nota mínima (${verifyResult.minimumGrade}): ${verifyResult.minimumGradeMet ? 'Sí' : 'No'}` : ''}
+                        </small>
+                      )}
+                      <small>Firma digital, vigencia, titularidad y validez en registro confirmadas</small>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="muted">
+                    <LoadingMark label="Esperando la presentación del titular…" />
+                    Esta sección se actualizará automáticamente.
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="qr-placeholder">▦</span>
+                <h3>Verificación con consentimiento</h3>
+                <p>El titular de la billetera verá qué datos específicos solicitás y autorizará el envío de forma selectiva antes de presentar su credencial.</p>
+              </>
+            )}
+          </aside>
+        </section>
+      )}
+
+      {activeTab === 'connection' && (
+        <section className="attendance-page">
+          <div className="panel roster-panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Conectividad · Aula presencial</p>
+                <h2>Acceso a la red y a la billetera</h2>
+              </div>
+            </div>
+            <p className="muted">Estos códigos QR facilitan la conexión de los asistentes: primero pueden conectarse a la red Wi-Fi del aula y luego abrir la billetera en sus teléfonos.</p>
+            <div className="layout verify-layout">
+              <div className="form-panel">
+                <label>
+                  Nombre de la red Wi-Fi (SSID)
+                  <input
+                    value={networkInfo.ssid || wifiSsidOverride}
+                    onChange={(event) => { setWifiSsidOverride(event.target.value); setShowWifiQr(false) }}
+                    readOnly={Boolean(networkInfo.ssid)}
+                    placeholder="Ingresá el nombre exacto de la red Wi-Fi"
+                  />
+                </label>
+                {!networkInfo.ssid && (
+                  <p className="muted">El sistema no detectó automáticamente el nombre del Wi-Fi. Ingresalo tal como figura en los ajustes de red para generar el QR.</p>
+                )}
+                <label>
+                  Seguridad de la red
+                  <select value={wifiSecurity} onChange={(event) => { setWifiSecurity(event.target.value as 'WPA' | 'nopass'); setShowWifiQr(false) }}>
+                    <option value="WPA">Red protegida con contraseña (WPA / WPA2)</option>
+                    <option value="nopass">Red abierta (sin contraseña)</option>
+                  </select>
+                </label>
+                {wifiSecurity === 'WPA' && (
+                  <label>
+                    Contraseña de la red Wi-Fi
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={wifiPassword}
+                      onChange={(event) => { setWifiPassword(event.target.value); setShowWifiQr(false) }}
+                      placeholder="Ingresá la clave de la red"
+                    />
+                  </label>
+                )}
+                <p className="muted">La contraseña solo se utiliza para generar el código QR en esta pantalla; no se almacena en el servidor.</p>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => setShowWifiQr(true)}
+                  disabled={!wifiSsid || (wifiSecurity === 'WPA' && !wifiPassword)}
+                >
+                  Generar código QR de Wi-Fi
+                </button>
+              </div>
+              <div className="request-panel companion-qrs">
+                {showWifiQr && wifiQr ? (
+                  <QrDisplay value={wifiQr} label={`Wi-Fi · ${wifiSsid}${wifiSecurity === 'nopass' ? ' (red abierta)' : ''}`} />
+                ) : (
+                  <div>
+                    <span className="qr-placeholder">▦</span>
+                    <small>Configurá la red para generar el código QR de Wi-Fi</small>
+                  </div>
+                )}
+                <QrDisplay value={localAppUrl} label="Escanear para abrir la billetera" />
+                <small>Dirección local en el aula: {localAppUrl}</small>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'class-photo' && actor.role === 'photographer' && (
+        <section className="layout verify-layout">
+          <div className="panel">
+            <p className="eyebrow">Registro fotográfico · Responsable de medios</p>
+            <h2>Fotografía grupal de la clase</h2>
+            <p className="muted">Tomá la fotografía grupal con la cámara o seleccioná una imagen de tu dispositivo. La imagen se optimizará y quedará guardada en el servidor para estampar los recuerdos conmemorativos.</p>
+            <label>
+              Fotografía grupal
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(event) => { void saveClassPhoto(event.target.files?.[0]); event.currentTarget.value = '' }}
+                disabled={classPhotoWorking}
+              />
+            </label>
+            <p className="muted">
+              {classPhotoWorking
+                ? 'Subiendo y procesando la imagen en el servidor…'
+                : classPhotoStatus
+                  ? `✓ Fotografía guardada${classPhotoSavedAt ? ` · ${formatDate(classPhotoSavedAt)}` : ''}. Ya se encuentra disponible para los recuerdos.`
+                  : 'Todavía no se ha cargado una fotografía para esta jornada.'}
+            </p>
+          </div>
+          <aside className="panel request-panel">
+            {classPhotoPreview ? (
+              <img className="class-photo-preview" src={classPhotoPreview} alt="Vista previa de la fotografía grupal guardada en el servidor" />
+            ) : (
+              <div className="class-photo-placeholder">📷</div>
+            )}
+            <h3>{classPhotoStatus ? 'Fotografía grupal lista' : 'Foto de la clase'}</h3>
+            <p>
+              {classPhotoStatus
+                ? 'El docente ya puede generar el código QR conmemorativo con esta imagen.'
+                : 'Al guardar la imagen, se integrará automáticamente a cada recuerdo conmemorativo personalizado.'}
+            </p>
+          </aside>
+        </section>
+      )}
+
+      {activeTab === 'souvenir' && (
+        <section className="layout verify-layout">
+          <div className="panel">
+            <p className="eyebrow">Recuerdo conmemorativo · Docente</p>
+            <h2>Souvenir digital para la clase</h2>
+            <p className="muted">Generá un código QR conmemorativo para proyectar en el aula. Cada asistente lo escaneará desde su billetera y obtendrá su recuerdo personalizado con su nombre y la foto del grupo.</p>
+            <p className="muted">
+              {classPhotoStatus
+                ? `✓ Fotografía grupal disponible${classPhotoSavedAt ? ` · ${formatDate(classPhotoSavedAt)}` : ''}.`
+                : '⚠️ Primero debés tomar y guardar la foto grupal desde la pestaña «Foto grupal».'}
+            </p>
+            <label>
+              Título del recuerdo
+              <input
+                value={souvenirTitle}
+                onChange={(event) => { setSouvenirTitle(event.target.value); setSouvenirSession(null) }}
+                maxLength={120}
+                placeholder="Ej.: Seminario de Actualización II"
+              />
+            </label>
+            <label>
+              Dedicatoria o mensaje grupal
+              <textarea
+                rows={3}
+                value={souvenirMessage}
+                onChange={(event) => { setSouvenirMessage(event.target.value); setSouvenirSession(null) }}
+                maxLength={160}
+                placeholder="Gracias por participar de nuestro proyecto."
+              />
+            </label>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => void createSouvenirSession()}
+              disabled={working || !classPhotoStatus || !souvenirTitle.trim() || !souvenirMessage.trim()}
+            >
+              {working && <span className="button-spinner" />}
+              {working ? 'Generando código QR…' : souvenirSession ? 'Generar un nuevo código QR' : 'Generar código QR para todos'}
+            </button>
+            <p className="muted">
+              Cada billetera registrada puede reclamar su recuerdo una sola vez. El código QR permanecerá activo por {souvenirSession ? formatDate(souvenirSession.expiresAt) : '24 horas'}.
+            </p>
+          </div>
+          <aside className="panel request-panel">
+            {souvenirSession ? (
+              <>
+                <button type="button" className="primary-button" onClick={() => setSouvenirQrOpen(true)}>
+                  Ver código QR en pantalla completa
+                </button>
+                <h3>Un código QR para todo el grupo</h3>
+                <p>Al escanearlo, el sistema incorpora el nombre de cada titular a su propia credencial de recuerdo.</p>
+              </>
+            ) : (
+              <>
+                <span className="qr-placeholder">✦</span>
+                <h3>El código QR conmemorativo aparecerá acá</h3>
+                <p>Configurá el título y la dedicatoria para habilitar la descarga del recuerdo para todos los asistentes.</p>
+              </>
+            )}
+          </aside>
+        </section>
+      )}
+
+      {activeTab === 'attendance' && (
+        <section className="attendance-page">
+          <div className="layout verify-layout">
+            <div className="panel">
+              <p className="eyebrow">Gestión docente · {actor.name}</p>
+              <h2>Control de asistencia</h2>
+              <p className="muted">El código QR tiene una vigencia de 1 minuto para garantizar la presencia en el aula. Cada billetera registra una única asistencia mediante firma criptográfica.</p>
+              <label>
+                Materia o seminario
+                <input value={attendanceSubject} onChange={(event) => setAttendanceSubject(event.target.value)} />
+              </label>
+              {attendance?.status === 'Abierta' ? (
+                <button type="button" className="secondary-button" onClick={() => void closeAttendance()}>
+                  Finalizar sesión de asistencia
+                </button>
+              ) : (
+                <button type="button" className="primary-button" onClick={() => void openAttendance()} disabled={working}>
+                  {working && <span className="button-spinner" />}
+                  {working ? 'Abriendo sesión…' : 'Abrir asistencia y mostrar código QR'}
+                </button>
+              )}
+              <button type="button" className="reset-demo-button" onClick={() => void resetDemo()} disabled={resetWorking}>
+                {resetWorking ? 'Reiniciando demostración…' : 'Reiniciar demostración (estado inicial)'}
+              </button>
+              <div className="attendance-list">
+                <h3>Asistencias registradas en esta sesión ({attendanceRecords.length})</h3>
+                {attendanceRecords.map((record) => (
+                  <p key={`${record.holder}-${record.recordedAt}`}>✓ {record.studentName} · {formatDate(record.recordedAt)}</p>
+                ))}
+                {attendance?.status === 'Abierta' && attendanceRecords.length === 0 && (
+                  <p className="muted"><LoadingMark label="Esperando registros de los estudiantes…" /></p>
+                )}
+              </div>
+            </div>
+
+            <aside className="panel request-panel">
+              {attendance?.status === 'Abierta' && qr?.value.includes(':attendance:') ? (
+                <>
+                  <QrDisplay value={qr.value} label={qr.label} />
+                  <h3>{attendance.subject}</h3>
+                  <p>{attendance.section} · Vence a las: {formatDate(attendance.expiresAt)}</p>
+                </>
+              ) : (
+                <>
+                  <span className="qr-placeholder">▦</span>
+                  <h3>Sesión de asistencia</h3>
+                  <p>Iniciá la sesión para proyectar el código QR dinámico que escanearán los estudiantes con su teléfono.</p>
+                </>
+              )}
+            </aside>
+          </div>
+
+          <div className="panel roster-panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Planilla institucional · {attendanceRoster?.teacherName ?? 'Marcelo Roldan'}</p>
+                <h2>{attendanceRoster?.courseName ?? 'Seminario de Actualización II'}</h2>
+              </div>
+              <div className="roster-actions">
+                <span className="live-badge"><i />Actualización en vivo · 3 s</span>
+                <button
+                  type="button"
+                  className="secondary-button download-button"
+                  onClick={() => void downloadAttendance()}
+                  disabled={attendanceDownloadWorking}
+                >
+                  {attendanceDownloadWorking ? 'Generando archivo…' : 'Descargar planilla (CSV / Excel)'}
+                </button>
+              </div>
+            </div>
+            <p className="muted">La planilla registra automáticamente las asistencias al recibir cada comprobante.</p>
+            {attendanceDownloadError && <p className="consent-error" role="alert">No se pudo descargar la planilla: {attendanceDownloadError}</p>}
+            <div className="roster-scroll">
+              <table className="roster-table">
+                <thead>
+                  <tr>
+                    <th>Estudiante</th>
+                    {attendanceRoster?.dates.map((date) => <th key={date.key}>{date.label}</th>)}
+                    {!attendanceRoster?.dates.length && <th>Sin clases registradas</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(attendanceRoster?.students ?? demoStudents.map((student): AttendanceRoster['students'][number] => ({ ...student, attendance: {} }))).map((student) => (
+                    <tr key={student.id}>
+                      <th scope="row">{student.fullName}</th>
+                      {attendanceRoster?.dates.map((date) => {
+                        const state = student.attendance[date.key] ?? 'A'
+                        return <td key={date.key} className={state === 'P' ? 'present-cell' : 'absent-cell'}>{state}</td>
+                      })}
+                      {!attendanceRoster?.dates.length && <td className="absent-cell">A</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="roster-legend">
+              <span className="legend-chip legend-present">P · Presente</span>
+              <span className="legend-chip legend-absent">A · Ausente</span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {pendingVerify && (
+        <div className="consent-backdrop">
+          <section className="consent-card" role="dialog" aria-modal="true" aria-label="Solicitud de presentación de credencial">
+            <p className="eyebrow">Solicitud de presentación</p>
+            <h2>Elegí qué datos deseás compartir</h2>
+            <p>
+              Una entidad verificadora solicita tu credencial de: <strong>{pendingVerify.kind}</strong>
+              {pendingVerify.subject && <> en la materia <strong>{pendingVerify.subject}</strong></>}
+              {pendingVerify.minimumGrade != null && <> con calificación mínima de <strong>{pendingVerify.minimumGrade}</strong></>}
+            </p>
+            {pendingVerify.requestNote && <p className="muted">Motivo informado: «{pendingVerify.requestNote}»</p>}
+            {matchingVerificationCredentials.map((credential) => {
+              const choices: [string, string][] = [
+                ['nombreEstudiante', 'Nombre y apellido'],
+                ['matricula', 'Número de matrícula'],
+                ['titulo', 'Título de la credencial'],
+                ['detalle', 'Detalle académico'],
+                ['materia', 'Materia'],
+                ['nota', 'Calificación numérica exacta'],
+              ]
+              if (pendingVerify.minimumGrade != null) {
+                choices.push([`cumpleNotaMinima${pendingVerify.minimumGrade}`, `¿Cumple con la calificación mínima exigida (${pendingVerify.minimumGrade})?`])
+              }
+              return (
+                <div className="consent-credential" key={credential.id}>
+                  <span className="credential-icon">{iconFor(credential.type as CredentialKind)}</span>
+                  <div>
+                    <strong>{credential.claims.titulo}</strong>
+                    <p>
+                      {choices
+                        .filter(([key]) => key in credential.claims || key.startsWith('cumpleNotaMinima'))
+                        .map(([key, label]) => (
+                          <label className="disclosure-choice" key={key}>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(shareFields[key])}
+                              disabled={Boolean(pendingVerify.subject && key === 'materia') || (pendingVerify.minimumGrade != null && key.startsWith('cumpleNotaMinima'))}
+                              onChange={(event) => setShareFields((current) => ({ ...current, [key]: event.target.checked }))}
+                            />
+                            {label}
+                            {(pendingVerify.requiredClaims ?? []).includes(key) && <small> · Solicitado por el verificador</small>}
+                            {key.startsWith('cumpleNotaMinima') && <small> · {Number(credential.claims.nota) >= pendingVerify.minimumGrade! ? 'Sí cumple' : 'No cumple'}</small>}
+                          </label>
+                        ))}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+            {!matchingVerificationCredentials.length && (
+              <p className="scanner-error" role="alert">No disponés de una credencial activa en esta billetera que cumpla con los requisitos solicitados.</p>
+            )}
+            {verifyShareError && <p className="consent-error" role="alert">No se pudo presentar la credencial: {verifyShareError}</p>}
+            <div className="consent-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => { setPendingVerify(null); setNotice('Cancelaste la presentación de tu credencial.') }}
+              >
+                Rechazar solicitud
+              </button>
+              {matchingVerificationCredentials.map((credential) => (
+                <button
+                  type="button"
+                  className="primary-button"
+                  key={credential.id}
+                  disabled={working}
+                  onClick={() => void shareCredential(credential)}
+                >
+                  {working ? <><span className="button-spinner" /> Enviando…</> : 'Autorizar y compartir'}
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
-        <aside className={`panel request-panel${verifyResult ? ' verify-result-panel' : ''}`}>{qr?.value.includes(':verify:') ? <><QrDisplay value={qr.value} label={qr.label} /><h3>Solicitud temporal</h3><p>Vence: {formatDate(qr.expiresAt)}</p>{verifyResult ? <div className="verification-result"><span className="result-check">✓</span><div><strong>Credencial válida</strong><p>{verifyResult.studentName ? `${verifyResult.studentName} · ` : ''}{verifyResult.title} · {verifyResult.kind}</p>{(verifyResult.subject || verifyResult.grade || verifyResult.minimumGradeMet !== undefined) && <small>{verifyResult.subject ? `Materia: ${verifyResult.subject}` : ''}{verifyResult.grade ? ` · Nota: ${verifyResult.grade}` : verifyResult.minimumGradeMet !== undefined ? ` · Cumple nota mínima ${verifyResult.minimumGrade}: ${verifyResult.minimumGradeMet ? 'Sí' : 'No'}` : ''}</small>}<small>Firma, vigencia, titular y estado verificados</small></div></div> : <p className="muted"><LoadingMark label="Esperando la respuesta del titular…" /> Esta pantalla se actualizará sola.</p>}</> : <><span className="qr-placeholder">▦</span><h3>Presentación con consentimiento</h3><p>El estudiante ve qué se solicita y confirma antes de enviar su credencial.</p></>}</aside>
-      </section>}
+      )}
 
-      {activeTab === 'connection' && <section className="attendance-page">
-        <div className="panel roster-panel"><div className="section-heading"><div><p className="eyebrow">Complemento · acceso al aula</p><h2>Conexión de los presentes</h2></div></div><p className="muted">Estos QR son independientes de la asistencia. Primero pueden conectarse al Wi-Fi y luego abrir la app local en su teléfono.</p><div className="layout verify-layout"><div className="form-panel"><label>Nombre de la red Wi-Fi<input value={networkInfo.ssid || wifiSsidOverride} onChange={(event) => { setWifiSsidOverride(event.target.value); setShowWifiQr(false) }} readOnly={Boolean(networkInfo.ssid)} placeholder="Ingresá el nombre de la red Wi‑Fi" /></label>{!networkInfo.ssid && <p className="muted">macOS está ocultando el nombre de la red a las herramientas locales. Ingresalo manualmente como aparece en el menú Wi‑Fi; se usará para generar el QR.</p>}<label>Seguridad de la red<select value={wifiSecurity} onChange={(event) => { setWifiSecurity(event.target.value as 'WPA' | 'nopass'); setShowWifiQr(false) }}><option value="WPA">Protegida con contraseña</option><option value="nopass">Abierta, sin contraseña</option></select></label>{wifiSecurity === 'WPA' && <label>Contraseña Wi-Fi<input type="password" autoComplete="new-password" value={wifiPassword} onChange={(event) => { setWifiPassword(event.target.value); setShowWifiQr(false) }} placeholder="Ingresá la contraseña" /></label>}<p className="muted">La contraseña solo se usa para generar el QR en esta pantalla; no se guarda en el servidor.</p><button type="button" className="primary-button" onClick={() => setShowWifiQr(true)} disabled={!wifiSsid || (wifiSecurity === 'WPA' && !wifiPassword)}>Generar QR del Wi-Fi</button></div><div className="request-panel companion-qrs">{showWifiQr && wifiQr ? <QrDisplay value={wifiQr} label={`Wi-Fi · ${wifiSsid}${wifiSecurity === 'nopass' ? ' · abierta' : ''}`} /> : <div><span className="qr-placeholder">▦</span><small>Elegí el tipo de red y generá el QR Wi-Fi</small></div>}<QrDisplay value={localAppUrl} label="Abrir billetera en esta red" /><small>Enlace local: {localAppUrl}</small></div></div></div>
-      </section>}
+      {pendingAttendance && (
+        <div className="consent-backdrop">
+          <section className="consent-card" role="dialog" aria-modal="true" aria-label="Confirmar asistencia presencial">
+            <p className="eyebrow">Confirmar asistencia presencial</p>
+            <h2>{pendingAttendance.subject}</h2>
+            <p>{pendingAttendance.section} · Sesión presencial activa del docente</p>
+            <p>
+              Se acreditará la presencia de <strong>{savedStudent?.fullName ?? 'un estudiante sin identificar'}</strong> mediante una prueba criptográfica segura de esta billetera. Por privacidad, no se comparten notas ni otras credenciales académicas.
+            </p>
+            {attendanceError && <p className="consent-error" role="alert">No se pudo registrar la presencia: {attendanceError}</p>}
+            <div className="consent-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => { setPendingAttendance(null); setAttendanceError(''); setNotice('Cancelaste el registro de asistencia.') }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={working}
+                onClick={() => void confirmAttendance()}
+              >
+                {working ? <><span className="button-spinner" /> Registrando…</> : 'Confirmar mi presencia'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
-      {activeTab === 'class-photo' && actor.role === 'photographer' && <section className="layout verify-layout"><div className="panel"><p className="eyebrow">Foto de la clase · acceso del responsable</p><h2>Guardá el recuerdo en la Mac</h2><p className="muted">Usá la cámara trasera del celular para tomar una foto grupal, o elegí una imagen. Se reduce de tamaño y se guarda directamente en la computadora que ejecuta la demo.</p><label>Foto grupal<input type="file" accept="image/*" capture="environment" onChange={(event) => { void saveClassPhoto(event.target.files?.[0]); event.currentTarget.value = '' }} disabled={classPhotoWorking} /></label><p className="muted">{classPhotoWorking ? 'Subiendo la foto a la Mac…' : classPhotoStatus ? `Foto guardada${classPhotoSavedAt ? ` · ${formatDate(classPhotoSavedAt)}` : ''}. Se incluirá en los próximos souvenirs.` : 'Todavía no hay una foto guardada.'}</p></div><aside className="panel request-panel">{classPhotoPreview ? <img className="class-photo-preview" src={classPhotoPreview} alt="Vista previa de la foto de la clase guardada en la Mac" /> : <div className="class-photo-placeholder">📷</div>}<h3>{classPhotoStatus ? 'Recuerdo listo' : 'Foto de toda la clase'}</h3><p>{classPhotoStatus ? 'El docente ya puede generar el QR del souvenir con esta imagen.' : 'Después de guardarla, la imagen se integrará a cada souvenir personalizado.'}</p></aside></section>}
-
-      {activeTab === 'souvenir' && <section className="layout verify-layout"><div className="panel"><p className="eyebrow">Profesor · recuerdo digital</p><h2>Souvenir para todos</h2><p className="muted">Generá un único QR para compartir con el grupo. Cada persona lo escanea desde su billetera y recibe una imagen conmemorativa con su propio nombre.</p><p className="muted">{classPhotoStatus ? `Foto grupal lista${classPhotoSavedAt ? ` · ${formatDate(classPhotoSavedAt)}` : ''}.` : 'Primero registrate en el celular fotografo y guardá la foto de la clase.'}</p><label>Título del recuerdo<input value={souvenirTitle} onChange={(event) => { setSouvenirTitle(event.target.value); setSouvenirSession(null) }} maxLength={120} placeholder="Ej.: Seminario de Actualización II" /></label><label>Mensaje para todos<textarea rows={3} value={souvenirMessage} onChange={(event) => { setSouvenirMessage(event.target.value); setSouvenirSession(null) }} maxLength={160} placeholder="Gracias por participar de nuestro proyecto." /></label><button type="button" className="primary-button" onClick={() => void createSouvenirSession()} disabled={working || !classPhotoStatus || !souvenirTitle.trim() || !souvenirMessage.trim()}>{working && <span className="button-spinner" />}{working ? 'Generando QR…' : souvenirSession ? 'Generar un nuevo QR' : 'Generar QR para todos'}</button><p className="muted">Cada billetera registrada puede reclamarlo una vez. El QR es válido hasta {souvenirSession ? formatDate(souvenirSession.expiresAt) : '24 horas después de generarlo'}.</p></div><aside className="panel request-panel">{souvenirSession ? <><button type="button" className="primary-button" onClick={() => setSouvenirQrOpen(true)}>Mostrar QR de nuevo</button><h3>Un QR, un recuerdo para cada uno</h3><p>Al escanearlo, el nombre de cada participante se incorpora a su propia imagen.</p></> : <><span className="qr-placeholder">✦</span><h3>El QR para todos aparecerá acá</h3><p>Se personaliza al escanear desde cada billetera registrada.</p></>}</aside></section>}
-
-      {activeTab === 'attendance' && <section className="attendance-page">
-        <div className="layout verify-layout"><div className="panel"><p className="eyebrow">Profesor · {actor.name}</p><h2>Asistencia de clase</h2><p className="muted">El QR vence en un minuto. Para leerlo y confirmar, cada estudiante debe estar conectado a la misma red Wi-Fi que el profesor. Cada billetera puede registrar una sola presencia por sesión.</p><label>Materia<input value={attendanceSubject} onChange={(event) => setAttendanceSubject(event.target.value)} /></label>{attendance?.status === 'Abierta' ? <button type="button" className="secondary-button" onClick={() => void closeAttendance()}>Cerrar sesión de asistencia</button> : <button type="button" className="primary-button" onClick={() => void openAttendance()} disabled={working}>Abrir asistencia y mostrar QR</button>}<button type="button" className="reset-demo-button" onClick={() => void resetDemo()} disabled={resetWorking}>{resetWorking ? 'Reiniciando…' : 'Reiniciar demo para una nueva prueba'}</button><div className="attendance-list"><h3>Presentes en esta sesión ({attendanceRecords.length})</h3>{attendanceRecords.map((record) => <p key={`${record.holder}-${record.recordedAt}`}>✓ {record.studentName} · {formatDate(record.recordedAt)}</p>)}{attendance?.status === 'Abierta' && attendanceRecords.length === 0 && <p className="muted"><LoadingMark label="Esperando registros…" /></p>}</div></div><aside className="panel request-panel">{attendance?.status === 'Abierta' && qr?.value.includes(':attendance:') ? <><QrDisplay value={qr.value} label={qr.label} /><h3>{attendance.subject}</h3><p>{attendance.section} · vence: {formatDate(attendance.expiresAt)}</p></> : <><span className="qr-placeholder">▦</span><h3>Asistencia temporal</h3><p>Abrí una sesión para generar el QR que escanearán los estudiantes.</p></>}</aside></div>
-        <div className="panel roster-panel"><div className="section-heading"><div><p className="eyebrow">Planilla local · {attendanceRoster?.teacherName ?? 'Marcelo Roldan'}</p><h2>{attendanceRoster?.courseName ?? 'Seminario de Actualización II'}</h2></div><div className="roster-actions"><span className="live-badge"><i />Actualización en vivo · 3 s</span><button type="button" className="secondary-button download-button" onClick={() => void downloadAttendance()} disabled={attendanceDownloadWorking}>{attendanceDownloadWorking ? 'Preparando…' : 'Descargar para Excel o Numbers'}</button></div></div><p className="muted">La asistencia se actualiza al registrar una presencia.</p>{attendanceDownloadError && <p className="consent-error" role="alert">No se pudo descargar: {attendanceDownloadError}</p>}<div className="roster-scroll"><table className="roster-table"><thead><tr><th>Estudiante</th>{attendanceRoster?.dates.map((date) => <th key={date.key}>{date.label}</th>)}{!attendanceRoster?.dates.length && <th>Sin clases registradas</th>}</tr></thead><tbody>{(attendanceRoster?.students ?? demoStudents.map((student): AttendanceRoster['students'][number] => ({ ...student, attendance: {} }))).map((student) => <tr key={student.id}><th scope="row">{student.fullName}</th>{attendanceRoster?.dates.map((date) => { const state = student.attendance[date.key] ?? 'A'; return <td key={date.key} className={state === 'P' ? 'present-cell' : 'absent-cell'}>{state}</td> })}{!attendanceRoster?.dates.length && <td className="absent-cell">A</td>}</tr>)}</tbody></table></div><div className="roster-legend"><span className="legend-chip legend-present">P · Presente</span><span className="legend-chip legend-absent">A · Ausente</span></div></div>
-      </section>}
-
-      {pendingVerify && <div className="consent-backdrop"><section className="consent-card" role="dialog" aria-modal="true"><p className="eyebrow">Solicitud del verificador</p><h2>Elegí qué datos compartir</h2><p>Se solicita: <strong>{pendingVerify.kind}</strong>{pendingVerify.subject && <> de <strong>{pendingVerify.subject}</strong></>}{pendingVerify.minimumGrade != null && <> · nota mínima <strong>{pendingVerify.minimumGrade}</strong></>}</p>{pendingVerify.requestNote && <p>Detalle: {pendingVerify.requestNote}</p>}{matchingVerificationCredentials.map((credential) => { const choices: [string, string][] = [['nombreEstudiante', 'Nombre'], ['matricula', 'Matrícula'], ['titulo', 'Título'], ['detalle', 'Detalle'], ['materia', 'Materia'], ['nota', 'Nota exacta']]; if (pendingVerify.minimumGrade != null) choices.push([`cumpleNotaMinima${pendingVerify.minimumGrade}`, `¿Cumple la nota mínima ${pendingVerify.minimumGrade}?`]); return <div className="consent-credential" key={credential.id}><span className="credential-icon">{iconFor(credential.type as CredentialKind)}</span><div><strong>{credential.claims.titulo}</strong><p>{choices.filter(([key]) => key in credential.claims || key.startsWith('cumpleNotaMinima')).map(([key, label]) => <label className="disclosure-choice" key={key}><input type="checkbox" checked={Boolean(shareFields[key])} disabled={Boolean(pendingVerify.subject && key === 'materia') || (pendingVerify.minimumGrade != null && key.startsWith('cumpleNotaMinima'))} onChange={(event) => setShareFields((current) => ({ ...current, [key]: event.target.checked }))} />{label}{(pendingVerify.requiredClaims ?? []).includes(key) && <small> · solicitado, podés desactivarlo</small>}{key.startsWith('cumpleNotaMinima') && <small> · {Number(credential.claims.nota) >= pendingVerify.minimumGrade! ? 'Sí' : 'No'}</small>}</label>)}</p></div></div>})}{!matchingVerificationCredentials.length && <p className="scanner-error">No tenés una credencial activa que cumpla estos requisitos.</p>}{verifyShareError && <p className="consent-error" role="alert">No se pudo compartir: {verifyShareError}</p>}<div className="consent-actions"><button type="button" className="secondary-button" onClick={() => { setPendingVerify(null); setNotice('Rechazaste compartir la credencial.') }}>Rechazar</button>{matchingVerificationCredentials.map((credential) => <button type="button" className="primary-button" key={credential.id} disabled={working} onClick={() => void shareCredential(credential)}>{working ? <><span className="button-spinner" /> Enviando…</> : 'Confirmar y compartir'}</button>)}</div></section></div>}
-      {pendingAttendance && <div className="consent-backdrop"><section className="consent-card" role="dialog" aria-modal="true"><p className="eyebrow">Confirmar asistencia</p><h2>{pendingAttendance.subject}</h2><p>{pendingAttendance.section} · sesión temporal del profesor</p><p>Se registrará la presencia de <strong>{savedStudent?.fullName ?? 'un estudiante sin identificar'}</strong> usando una prueba criptográfica de esta billetera. No se comparten notas ni otras credenciales.</p>{attendanceError && <p className="consent-error" role="alert">No se pudo registrar: {attendanceError}</p>}<div className="consent-actions"><button type="button" className="secondary-button" onClick={() => { setPendingAttendance(null); setAttendanceError(''); setNotice('Cancelaste el registro de asistencia.') }}>Cancelar</button><button type="button" className="primary-button" disabled={working} onClick={() => void confirmAttendance()}>{working ? 'Registrando…' : 'Confirmar presencia'}</button></div></section></div>}
       {activeTab === 'souvenir' && souvenirQrOpen && souvenirSession && (
         <div className="souvenir-qr-backdrop">
-          <section className="souvenir-qr-screen" role="dialog" aria-modal="true" aria-label="QR de souvenir para todos">
+          <section className="souvenir-qr-screen" role="dialog" aria-modal="true" aria-label="Código QR conmemorativo para el grupo">
             <button type="button" className="souvenir-qr-close" onClick={() => setSouvenirQrOpen(false)}>
-              Cerrar ×
+              Cerrar ventana ×
             </button>
 
             {/* Glowing nebulas */}
@@ -1271,7 +1899,7 @@ function App() {
             <div className="souvenir-qr-content">
               <div className="souvenir-qr-mark">✦</div>
               <p className="eyebrow" style={{ color: '#ffe49e', letterSpacing: '0.15em' }}>UNLaR · SEMINARIO DE ACTUALIZACIÓN II</p>
-              <h2>Un recuerdo para llevarte</h2>
+              <h2>Un recuerdo de nuestra jornada</h2>
               <p className="souvenir-subtitle">Un mismo código QR, un recuerdo único y personalizado para cada participante.</p>
 
               <div className="souvenir-floating-card">
@@ -1285,9 +1913,32 @@ function App() {
           </section>
         </div>
       )}
-      {souvenirPreview && <div className="souvenir-backdrop"><section className="souvenir-card" role="dialog" aria-modal="true" aria-label="Tu souvenir personalizado"><button type="button" className="souvenir-close" onClick={() => setSouvenirPreview(null)} aria-label="Cerrar">×</button><div className="souvenir-fireworks fireworks-one" /><div className="souvenir-fireworks fireworks-two" /><div className="souvenir-heading"><span>✦</span><h2>¡Un recuerdo para vos!</h2><p>Personalizado para {souvenirPreview.name}</p></div><img className="souvenir-image" src={souvenirPreview.image} alt={`Souvenir conmemorativo para ${souvenirPreview.name}`} /><div className="souvenir-actions"><button type="button" className="primary-button" onClick={downloadSouvenir}>Descargar imagen</button><button type="button" className="secondary-button" onClick={() => void shareSouvenir()}>Compartir</button></div><small>Guardalo o compartilo en WhatsApp, Instagram y tus apps favoritas.</small></section></div>}
+      {souvenirPreview && (
+        <div className="souvenir-backdrop">
+          <section className="souvenir-card" role="dialog" aria-modal="true" aria-label="Tu recuerdo personalizado">
+            <button type="button" className="souvenir-close" onClick={() => setSouvenirPreview(null)} aria-label="Cerrar">×</button>
+            <div className="souvenir-fireworks fireworks-one" />
+            <div className="souvenir-fireworks fireworks-two" />
+            <div className="souvenir-heading">
+              <span>✦</span>
+              <h2>¡Tu recuerdo conmemorativo está listo!</h2>
+              <p>Personalizado para {souvenirPreview.name}</p>
+            </div>
+            <img className="souvenir-image" src={souvenirPreview.image} alt={`Recuerdo conmemorativo personalizado para ${souvenirPreview.name}`} />
+            <div className="souvenir-actions">
+              <button type="button" className="primary-button" onClick={downloadSouvenir}>
+                Descargar imagen
+              </button>
+              <button type="button" className="secondary-button" onClick={() => void shareSouvenir()}>
+                Compartir
+              </button>
+            </div>
+            <small>Guardalo en tu galería o compartilo directamente en tus redes y apps de mensajería.</small>
+          </section>
+        </div>
+      )}
       {scannerOpen && <QrScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />}
-      <footer>Universidad Nacional de La Rioja · Credenciales digitales</footer>
+      <footer>Universidad Nacional de La Rioja · Billetera Universitaria Digital</footer>
     </main>
   )
 }
