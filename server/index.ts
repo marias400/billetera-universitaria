@@ -2,23 +2,30 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import Database from 'better-sqlite3'
 import { createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, randomUUID, sign, verify } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { networkInterfaces } from 'node:os'
+import { execFileSync } from 'node:child_process'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const dataDir = join(root, 'data')
 const databasePath = join(dataDir, 'billetera.sqlite')
 const privateKeyPath = join(dataDir, 'issuer-ed25519-private.pem')
 const attendanceFilePath = join(dataDir, 'planilla-asistencia.csv')
+const classPhotoPath = join(dataDir, 'foto-clase.jpg')
 const teacherName = 'Marcelo Roldan'
 const courseName = 'Seminario de Actualización II'
 const demoStudents = [
   { id: 'mariano-arias-simone', fullName: 'Mariano Arias Simone', enrollmentNumber: 'DEMO-ISI-001' },
   { id: 'peralta-herrar-nahuel', fullName: 'Peralta Herrera Nahuel', enrollmentNumber: 'DEMO-ISI-002' },
 ]
-type DemoRole = 'student' | 'teacher' | 'institutional'
+type DemoRole = 'student' | 'teacher' | 'institutional' | 'photographer'
 type DemoActor = { id: string; role: DemoRole; name: string; scope?: 'academic' | 'library' | 'gym'; studentId?: string }
+const isPhotographerName = (name: string) => {
+  const normalizedName = name.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  return normalizedName === 'fotografo' || normalizedName === 'fotografa'
+}
 const demoAccounts: Record<string, { password: string; actor: DemoActor }> = {
   'student-mariano': { password: 'demo2026', actor: { id: 'student-mariano', role: 'student', name: demoStudents[0].fullName, studentId: demoStudents[0].id } },
   'student-nahuel': { password: 'demo2026', actor: { id: 'student-nahuel', role: 'student', name: demoStudents[1].fullName, studentId: demoStudents[1].id } },
@@ -36,15 +43,22 @@ db.exec([
   'create table if not exists credentials (id text primary key, kind text not null, title text not null, detail text not null, holder text not null, issued_at text not null, expires_at text, status text not null default "Activa", created_at text not null);',
   'create table if not exists attendance_sessions (id text primary key, subject text not null, section text not null, expires_at text not null, status text not null default "Abierta", created_at text not null);',
   'create table if not exists attendance_records (id text primary key, session_id text not null references attendance_sessions(id), holder text not null, recorded_at text not null, student_id text, student_name text, unique(session_id, holder));',
-  'create table if not exists students (id text primary key, full_name text not null unique, wallet_public_key text unique, created_at text not null);',
+  'create table if not exists students (id text primary key, full_name text not null, wallet_public_key text unique, created_at text not null);',
   'create table if not exists credential_deliveries (code text primary key, credential_id text not null, expires_at text not null, used_at text);',
-  'create table if not exists presentation_requests (code text primary key, kind text not null, expires_at text not null, status text not null default "Abierta", result_json text);',
+  'create table if not exists reward_sessions (code text primary key, title text not null, detail text not null, expires_at text not null, created_at text not null);',
+  'create table if not exists reward_claims (code text not null references reward_sessions(code), student_id text not null references students(id), credential_id text not null references credentials(id), primary key(code, student_id));',
+  'create table if not exists presentation_requests (code text primary key, kind text not null, subject text, minimum_grade real, request_note text, expires_at text not null, status text not null default "Abierta", result_json text);',
   'create table if not exists wallet_bindings (holder text primary key, public_key text not null, created_at text not null);',
 ].join('\n'))
 
 const studentColumns = db.prepare('pragma table_info(students)').all() as { name: string }[]
 if (!studentColumns.some((column) => column.name === 'enrollment_number')) db.exec('alter table students add column enrollment_number text')
 if (!studentColumns.some((column) => column.name === 'identity_locked')) db.exec('alter table students add column identity_locked integer not null default 1')
+const uniqueNameIndex = (db.prepare('pragma index_list(students)').all() as { name: string; unique: number }[]).find((index) => index.unique && (db.prepare(`pragma index_info(${index.name})`).all() as { name: string }[]).some((column) => column.name === 'full_name'))
+if (uniqueNameIndex) {
+  db.exec('create table students_new (id text primary key, full_name text not null, wallet_public_key text unique, created_at text not null, enrollment_number text, identity_locked integer not null default 1);')
+  db.exec('insert into students_new (id, full_name, wallet_public_key, created_at, enrollment_number, identity_locked) select id, full_name, wallet_public_key, created_at, enrollment_number, identity_locked from students; drop table students; alter table students_new rename to students;')
+}
 
 const columns = db.prepare('pragma table_info(credentials)').all() as { name: string }[]
 if (!columns.some((column) => column.name === 'credential_json')) db.exec('alter table credentials add column credential_json text')
@@ -54,6 +68,12 @@ if (!sessionColumns.some((column) => column.name === 'created_at')) {
   db.exec('alter table attendance_sessions add column created_at text')
   db.exec("update attendance_sessions set created_at = strftime('%Y-%m-%dT%H:%M:%fZ', expires_at, '-1 minute') where created_at is null")
 }
+const presentationRequestColumns = db.prepare('pragma table_info(presentation_requests)').all() as { name: string }[]
+if (!presentationRequestColumns.some((column) => column.name === 'subject')) db.exec('alter table presentation_requests add column subject text')
+if (!presentationRequestColumns.some((column) => column.name === 'minimum_grade')) db.exec('alter table presentation_requests add column minimum_grade real')
+if (!presentationRequestColumns.some((column) => column.name === 'request_note')) db.exec('alter table presentation_requests add column request_note text')
+if (!presentationRequestColumns.some((column) => column.name === 'required_claims')) db.exec("alter table presentation_requests add column required_claims text not null default '[]'")
+if (!presentationRequestColumns.some((column) => column.name === 'include_exact_grade')) db.exec('alter table presentation_requests add column include_exact_grade integer not null default 0')
 const attendanceColumns = db.prepare('pragma table_info(attendance_records)').all() as { name: string }[]
 if (!attendanceColumns.some((column) => column.name === 'student_id')) db.exec('alter table attendance_records add column student_id text')
 if (!attendanceColumns.some((column) => column.name === 'student_name')) db.exec('alter table attendance_records add column student_name text')
@@ -131,7 +151,9 @@ function csvCell(value: string) {
 
 function getAttendanceRoster() {
   const sessions = db.prepare('select created_at as createdAt, expires_at as expiresAt from attendance_sessions').all() as { createdAt: string | null; expiresAt: string }[]
-  const dateKeys = [...new Set(sessions.map((session) => dateKey(session.createdAt ?? session.expiresAt)))].sort()
+  const fixedDates = ['2026-10-13', '2026-10-20']
+  const fixedAttendance = new Map([['2026-10-13', 'mariano-arias-simone'], ['2026-10-20', 'peralta-herrar-nahuel']])
+  const dateKeys = [...new Set([...sessions.map((session) => dateKey(session.createdAt ?? session.expiresAt)), ...fixedDates])].sort()
   const students = db.prepare('select id, full_name as fullName from students order by id').all() as { id: string; fullName: string }[]
   const records = db.prepare('select student_id as studentId, recorded_at as recordedAt from attendance_records where student_id is not null').all() as { studentId: string; recordedAt: string }[]
   const present = new Set(records.map((record) => `${record.studentId}|${dateKey(record.recordedAt)}`))
@@ -141,7 +163,11 @@ function getAttendanceRoster() {
     dates: dateKeys.map((key) => ({ key, label: dateLabel(key) })),
     students: students.map((student) => ({
       ...student,
-      attendance: Object.fromEntries(dateKeys.map((key) => [key, present.has(`${student.id}|${key}`) ? 'P' : 'A'])),
+      attendance: Object.fromEntries(dateKeys.map((key) => {
+        const fixedStudent = fixedAttendance.get(key)
+        const isPresent = fixedStudent ? student.id === fixedStudent : present.has(`${student.id}|${key}`)
+        return [key, isPresent ? 'P' : 'A']
+      })),
     })),
   }
 }
@@ -164,20 +190,129 @@ function regenerateAttendanceFile() {
 
 regenerateAttendanceFile()
 
-const app = Fastify({ logger: true, bodyLimit: 256 * 1024 })
+const app = Fastify({ logger: { level: 'warn', base: { service: 'api' } }, disableRequestLogging: true, bodyLimit: 5 * 1024 * 1024, trustProxy: true })
+app.addHook('onResponse', (request, reply, done) => {
+  const address = (request.ip || request.socket.remoteAddress || 'desconocida').replace(/^::ffff:/, '')
+  if (['127.0.0.1', '::1'].includes(address)) { done(); return }
+  const route = request.routeOptions.url ?? request.url.split('?')[0].replace(/\/[A-Za-z0-9_-]{24,}(?=\/|$)/g, '/:qr')
+  const status = reply.statusCode
+  const actor = actorFor(request)
+  if (route === '/api/presence') {
+    const clientId = (request.body as { clientId?: string } | undefined)?.clientId
+    if (clientId && /^[A-Za-z0-9_-]{12,80}$/.test(clientId)) console.log(`DEMO_CLIENT ${JSON.stringify({ id: clientId, name: actor && ['student', 'photographer'].includes(actor.role) ? actor.name : 'Visitante', ip: address, at: Date.now() })}`)
+  } else {
+    console.log(`DEMO_ACTIVITY ${JSON.stringify({ ip: address, name: actor && ['student', 'photographer'].includes(actor.role) ? actor.name : '', method: request.method, route, status, at: Date.now() })}`)
+  }
+  done()
+})
 await app.register(cors, { origin: true })
 app.get('/health', async () => ({ ok: true, service: 'billetera-universitaria-api' }))
+app.get('/api/network-info', async () => {
+  let ssid = ''
+  let wifiDevice = ''
+  if (process.platform === 'darwin') {
+    const devices: string[] = []
+    try {
+      const ports = execFileSync('/usr/sbin/networksetup', ['-listallhardwareports'], { encoding: 'utf8', timeout: 2000 })
+      const blocks = ports.split(/\n(?=Hardware Port:)/)
+      for (const block of blocks) {
+        if (!/^Hardware Port:\s*(?:Wi-Fi|AirPort)\s*$/im.test(block)) continue
+        wifiDevice = block.match(/^Device:\s*(\S+)/im)?.[1] ?? ''
+        if (wifiDevice) devices.push(wifiDevice)
+      }
+    } catch { /* Continue with known macOS Wi-Fi interface names. */ }
+    for (const device of [...new Set([...devices, 'en0', 'en1'])]) {
+      try {
+        const output = execFileSync('/usr/sbin/networksetup', ['-getairportnetwork', device], { encoding: 'utf8', timeout: 1500 }).trim()
+        const match = output.match(/(?:Current Wi-Fi Network|Current AirPort Network):\s*(.+)$/im)
+        if (match && !/not associated|unknown|none/i.test(match[1])) { ssid = match[1].trim(); wifiDevice = device; break }
+      } catch { ssid = '' }
+    }
+    if (!ssid) {
+      for (const device of [...new Set([...devices, 'en0', 'en1'])]) {
+        try {
+          const summary = execFileSync('/usr/sbin/ipconfig', ['getsummary', device], { encoding: 'utf8', timeout: 1500 })
+          const candidate = summary.match(/^\s*SSID\s*:\s*(.+)\s*$/im)?.[1]?.trim() ?? ''
+          if (candidate && !/^(?:<redacted>|unknown|none)$/i.test(candidate)) { ssid = candidate; wifiDevice = device; break }
+        } catch { /* Try another interface or detection method. */ }
+      }
+    }
+    // Recent macOS versions may hide SSID from individual command-line tools.
+    // system_profiler can still report the connected network under the Wi-Fi section.
+    if (!ssid) {
+      try {
+        const report = execFileSync('/usr/sbin/system_profiler', ['SPAirPortDataType', '-detailLevel', 'basic'], { encoding: 'utf8', timeout: 5000 })
+        const currentNetwork = report.match(/Current Network Information:\s*\n\s*([^\n:]+):/i)?.[1]?.trim() ?? ''
+        if (currentNetwork && !/^(?:unknown|none|not connected)$/i.test(currentNetwork)) ssid = currentNetwork
+      } catch { /* SSID remains empty; the UI allows manual entry. */ }
+    }
+  }
+  const interfaces = networkInterfaces()
+  const wifiAddresses = wifiDevice ? (interfaces[wifiDevice] ?? []) : []
+  const addresses = wifiAddresses.filter((item) => item.family === 'IPv4' && !item.internal).map((item) => item.address)
+  if (!addresses.length) {
+    for (const [name, entries] of Object.entries(interfaces)) {
+      if (name === 'lo0' || name.startsWith('utun') || name.startsWith('llw')) continue
+      addresses.push(...(entries ?? []).filter((item) => item.family === 'IPv4' && !item.internal).map((item) => item.address))
+    }
+  }
+  return { ssid, addresses }
+})
+app.post<{ Body: { fullName?: string; walletPublicKey?: string; holderSignature?: string } }>('/api/guests/register', async (request, reply) => {
+  const fullName = request.body?.fullName?.trim().replace(/\s+/g, ' ')
+  const { walletPublicKey, holderSignature } = request.body ?? {}
+  if (!fullName || fullName.length < 2 || fullName.length > 100) return reply.code(400).send({ message: 'Ingresá tu nombre y apellido (2 a 100 caracteres).' })
+  if (!walletPublicKey || !holderSignature) return reply.code(400).send({ message: 'No se pudo crear la billetera en este teléfono.' })
+  try {
+    const key = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
+    if (!verify(null, Buffer.from(`guest-register.${fullName}`), key, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'La prueba de la billetera no es válida.' })
+  } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
+  const id = `guest-${randomUUID()}`
+  const enrollmentNumber = `INV-${randomBytes(4).toString('hex').toUpperCase()}`
+  try {
+    db.prepare('insert into students (id, full_name, enrollment_number, identity_locked, wallet_public_key, created_at) values (?, ?, ?, 1, ?, ?)').run(id, fullName, enrollmentNumber, walletPublicKey, new Date().toISOString())
+    const holder = `did:unlar:student:${id}`
+    db.prepare('insert into wallet_bindings (holder, public_key, created_at) values (?, ?, ?)').run(holder, walletPublicKey, new Date().toISOString())
+  } catch { return reply.code(409).send({ message: 'Ese nombre ya está registrado en esta demo. Pedile al docente que revise el alta.' }) }
+  const actor: DemoActor = { id, role: isPhotographerName(fullName) ? 'photographer' : 'student', name: fullName, studentId: id }
+  const token = randomBytes(32).toString('base64url')
+  activeSessions.set(token, actor)
+  return reply.code(201).send({ token, actor, enrollmentNumber })
+})
+app.post<{ Body: { walletPublicKey?: string; holderSignature?: string } }>('/api/guests/restore', async (request, reply) => {
+  const { walletPublicKey, holderSignature } = request.body ?? {}
+  if (!walletPublicKey || !holderSignature) return reply.code(400).send({ message: 'No se encontró la clave de la billetera en este dispositivo.' })
+  try {
+    const walletKey = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
+    if (!verify(null, Buffer.from('guest-restore'), walletKey, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'No se pudo comprobar esta billetera.' })
+  } catch { return reply.code(422).send({ message: 'La clave guardada en este dispositivo no es válida.' }) }
+  const student = db.prepare('select id, full_name as name from students where wallet_public_key = ?').get(walletPublicKey) as { id: string; name: string } | undefined
+  if (!student) return reply.code(404).send({ message: 'No encontramos un registro vinculado a esta billetera.' })
+  const actor: DemoActor = { id: student.id, role: isPhotographerName(student.name) ? 'photographer' : 'student', name: student.name, studentId: student.id }
+  const token = randomBytes(32).toString('base64url')
+  activeSessions.set(token, actor)
+  return { token, actor }
+})
 app.post<{ Body: { account: string; password: string } }>('/api/demo/login', async (request, reply) => {
   const entry = demoAccounts[request.body?.account]
   if (!entry || request.body?.password !== entry.password) return reply.code(401).send({ message: 'Usuario o contraseña incorrectos.' })
+  if (entry.actor.role !== 'student' && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip)) return reply.code(403).send({ message: 'El acceso de docente e institución solo está disponible desde la Mac. Abrí la demo en https://localhost:5173/.' })
   const token = randomBytes(32).toString('base64url')
   activeSessions.set(token, entry.actor)
   return { token, actor: entry.actor, demoOnly: true }
 })
 app.addHook('preHandler', async (request, reply) => {
-  if (!request.url.startsWith('/api/') || request.url === '/api/demo/login') return
+  if (!request.url.startsWith('/api/') || request.url === '/api/demo/login' || request.url === '/api/network-info' || request.url === '/api/presence' || request.url === '/api/guests/register' || request.url === '/api/guests/restore') return
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '')
   if (!token || !activeSessions.has(token)) return reply.code(401).send({ message: 'Iniciá sesión para continuar.' })
+  const sessionActor = activeSessions.get(token)
+  if (sessionActor?.role === 'photographer') {
+    const allowed = request.method === 'GET' && (['/api/demo/me', '/api/issuer-key', '/api/credentials', '/api/students', '/api/rewards/class-photo', '/api/rewards/class-photo/image'].includes(request.url.split('?')[0]) || /^\/api\/attendance\/sessions\/[A-Za-z0-9_-]+$/.test(request.url.split('?')[0]))
+      || request.method === 'POST' && (request.url === '/api/presence' || request.url === '/api/rewards/class-photo' || /^\/api\/rewards\/[A-Za-z0-9_-]+\/claim$/.test(request.url))
+      || request.method === 'POST' && /^\/api\/attendance\/sessions\/[A-Za-z0-9_-]+\/check-in$/.test(request.url.split('?')[0])
+    if (!allowed) return reply.code(403).send({ message: 'El acceso de fotografía solo permite guardar la foto de la clase y usar la billetera propia.' })
+  }
+  if (sessionActor && !['student', 'photographer'].includes(sessionActor.role) && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip)) return reply.code(403).send({ message: 'El panel docente e institucional solo está disponible desde la Mac.' })
 })
 function actorFor(request: { headers: { authorization?: string } }) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '')
@@ -196,25 +331,50 @@ app.get('/api/demo/me', async (request, reply) => {
   if (!actor) return reply.code(401).send({ message: 'La sesión venció.' })
   return { actor, demoOnly: true }
 })
+app.post<{ Body: { clientId?: string } }>('/api/presence', async (request, reply) => {
+  const clientId = request.body?.clientId
+  if (!clientId || !/^[A-Za-z0-9_-]{12,80}$/.test(clientId)) return reply.code(400).send({ message: 'Identificador de dispositivo inválido.' })
+  return { connected: true }
+})
 app.get('/api/issuer-key', async (request, reply) => {
-  if (!requireRole(request, reply, ['student', 'teacher', 'institutional'])) return
+  if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional'])) return
   return { keyId: issuerId, algorithm: 'Ed25519', publicKeyPem: issuerPublicPem }
 })
 app.get('/api/credentials', async (request, reply) => {
-  const actor = requireRole(request, reply, ['student', 'teacher', 'institutional'])
+  const actor = requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional'])
   if (!actor) return
   const columns = "id, kind, title, detail, holder, issued_at as issuedAt, expires_at as expiresAt, status, created_at as createdAt, json_extract(credential_json, '$.claims.nombreEstudiante') as studentName, json_extract(credential_json, '$.claims.matricula') as enrollmentNumber"
-  if (actor.role === 'student') return db.prepare(`select ${columns} from credentials where holder = ? or holder in (select holder from wallet_bindings where public_key = (select wallet_public_key from students where id = ?)) order by created_at desc`).all(`did:unlar:student:${actor.studentId}`, actor.studentId)
+  if (actor.role === 'student' || actor.role === 'photographer') return db.prepare(`select ${columns} from credentials where holder = ? or holder in (select holder from wallet_bindings where public_key = (select wallet_public_key from students where id = ?)) order by created_at desc`).all(`did:unlar:student:${actor.studentId}`, actor.studentId)
   if (actor.role === 'teacher') return []
-  const allowed = actor.scope === 'library' ? ['Biblioteca'] : actor.scope === 'gym' ? ['Gimnasio'] : ['Regularidad', 'Materia aprobada', 'Nota de materia']
+  const allowed = actor.scope === 'library' ? ['Biblioteca'] : actor.scope === 'gym' ? ['Gimnasio'] : ['Alumno regular', 'Regularidad', 'Materia aprobada', 'Nota de materia']
   return db.prepare(`select ${columns} from credentials where kind in (${allowed.map(() => '?').join(',')}) order by created_at desc`).all(...allowed)
 })
 app.get('/api/students', async (request, reply) => {
-  if (!requireRole(request, reply, ['student', 'teacher', 'institutional'])) return
+  if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional'])) return
   const actor = actorFor(request)
   const rows = db.prepare('select id, full_name as fullName, enrollment_number as enrollmentNumber, identity_locked as identityLocked, wallet_public_key as walletPublicKey from students order by id').all() as { id: string; fullName: string; enrollmentNumber: string; identityLocked: number; walletPublicKey: string | null }[]
   const profiles = rows.map(({ walletPublicKey, ...student }) => ({ ...student, walletLinked: Boolean(walletPublicKey) }))
-  return actor?.role === 'student' ? profiles.filter((student) => student.id === actor.studentId) : profiles
+  return actor && ['student', 'photographer'].includes(actor.role) ? profiles.filter((student) => student.id === actor.studentId) : profiles
+})
+
+app.get('/api/rewards/class-photo', async (request, reply) => {
+  if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional'])) return
+  return existsSync(classPhotoPath) ? { available: true, updatedAt: statSync(classPhotoPath).mtime.toISOString() } : { available: false }
+})
+app.get('/api/rewards/class-photo/image', async (request, reply) => {
+  if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional'])) return
+  if (!existsSync(classPhotoPath)) return reply.code(404).send({ message: 'Todavía no se guardó la foto de la clase.' })
+  return { dataUrl: `data:image/jpeg;base64,${readFileSync(classPhotoPath).toString('base64')}` }
+})
+app.post<{ Body: { dataUrl?: string } }>('/api/rewards/class-photo', async (request, reply) => {
+  if (!requireRole(request, reply, ['photographer'])) return
+  const dataUrl = request.body?.dataUrl ?? ''
+  const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl)
+  if (!match) return reply.code(400).send({ message: 'La imagen debe estar en formato JPEG.' })
+  const image = Buffer.from(match[1], 'base64')
+  if (image.length > 3 * 1024 * 1024 || image.length < 4 || image[0] !== 0xff || image[1] !== 0xd8 || image[2] !== 0xff) return reply.code(400).send({ message: 'La foto debe ser JPEG y pesar hasta 3 MB.' })
+  writeFileSync(classPhotoPath, image)
+  return { saved: true, updatedAt: statSync(classPhotoPath).mtime.toISOString() }
 })
 
 app.post<{ Body: { fullName?: string; walletPublicKey: string; holderSignature: string } }>('/api/students/register', async (request, reply) => {
@@ -252,23 +412,91 @@ app.get('/api/attendance/export.csv', async (request, reply) => {
     .send(regenerateAttendanceFile())
 })
 
-app.post<{ Body: { kind: string; title: string; detail?: string; grade?: number; holder?: string; studentId?: string; expiresAt?: string | null } }>('/api/credentials', async (request, reply) => {
+app.post('/api/demo/reset', async (request, reply) => {
+  if (!requireRole(request, reply, ['teacher'])) return
+  if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip)) return reply.code(403).send({ message: 'El reinicio solo está disponible desde localhost en la Mac.' })
+  const keep = ['mariano-arias-simone', 'peralta-herrar-nahuel']
+  db.transaction(() => {
+    for (const table of ['credential_deliveries', 'reward_claims', 'reward_sessions', 'presentation_requests', 'attendance_records', 'attendance_sessions', 'credentials']) db.prepare(`delete from ${table}`).run()
+    db.prepare('delete from wallet_bindings where holder not in (?, ?)').run(...keep.map((id) => `did:unlar:student:${id}`))
+    db.prepare('delete from students where id not in (?, ?)').run(...keep)
+  })()
+  for (const [token, actor] of activeSessions) if (actor.role === 'student' || actor.role === 'photographer') activeSessions.delete(token)
+  if (existsSync(classPhotoPath)) unlinkSync(classPhotoPath)
+  regenerateAttendanceFile()
+  return { reset: true, retainedStudents: keep, deletedOperationalData: true }
+})
+
+app.post<{ Body: { title?: string; detail?: string } }>('/api/rewards/sessions', async (request, reply) => {
+  const actor = requireRole(request, reply, ['teacher'])
+  if (!actor) return
+  const title = request.body?.title?.trim() || 'Souvenir · Seminario de Actualización II'
+  const detail = request.body?.detail?.trim() || 'Gracias por participar de nuestro proyecto.'
+  if (title.length > 120 || detail.length > 160) return reply.code(400).send({ message: 'El título admite hasta 120 caracteres y el mensaje hasta 160.' })
+  const code = newCode()
+  const createdAt = new Date().toISOString()
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString()
+  db.prepare('insert into reward_sessions (code, title, detail, expires_at, created_at) values (?, ?, ?, ?, ?)').run(code, title, detail, expiresAt, createdAt)
+  return reply.code(201).send({ code, title, detail, expiresAt })
+})
+
+app.post<{ Params: { code: string }; Body: { walletPublicKey?: string; holderSignature?: string } }>('/api/rewards/:code/claim', async (request, reply) => {
+  const actor = requireRole(request, reply, ['student', 'photographer'])
+  if (!actor?.studentId) return
+  const session = db.prepare('select title, detail, expires_at as expiresAt from reward_sessions where code = ?').get(request.params.code) as { title: string; detail: string; expiresAt: string } | undefined
+  if (!session) return reply.code(404).send({ message: 'Este QR de souvenir no existe.' })
+  if (Date.parse(session.expiresAt) <= Date.now()) return reply.code(410).send({ message: 'Este QR de souvenir venció. Pedile al docente que genere uno nuevo.' })
+  const student = db.prepare('select full_name as fullName, enrollment_number as enrollmentNumber, wallet_public_key as walletPublicKey from students where id = ?').get(actor.studentId) as { fullName: string; enrollmentNumber: string; walletPublicKey: string | null } | undefined
+  if (!student?.walletPublicKey) return reply.code(409).send({ message: 'Primero vinculá tu billetera a tu registro.' })
+  const { walletPublicKey, holderSignature } = request.body ?? {}
+  const holder = `did:unlar:student:${actor.studentId}`
+  if (walletPublicKey !== student.walletPublicKey || !holderSignature) return reply.code(403).send({ message: 'Este souvenir requiere la billetera vinculada a tu registro.' })
+  try {
+    const walletKey = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
+    if (!verify(null, Buffer.from(`reward-claim.${request.params.code}.${holder}`), walletKey, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'No se pudo validar esta billetera.' })
+  } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
+  const existing = db.prepare('select c.credential_json as credentialJson from reward_claims rc join credentials c on c.id = rc.credential_id where rc.code = ? and rc.student_id = ?').get(request.params.code, actor.studentId) as { credentialJson: string } | undefined
+  if (existing) return { credential: JSON.parse(existing.credentialJson) as SignedCredential, alreadyClaimed: true }
+  const issuedAt = new Date().toISOString()
+  const credential = signCredential({
+    id: randomUUID(), type: 'Souvenir', issuer: 'did:web:unlar.edu.ar:prototipo', holder,
+    claims: { titulo: session.title, detalle: session.detail, estudianteId: actor.studentId, matricula: student.enrollmentNumber, nombreEstudiante: student.fullName }, issuedAt,
+  })
+  try {
+    db.transaction(() => {
+      db.prepare('insert into credentials (id, kind, title, detail, holder, issued_at, expires_at, status, created_at, credential_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(credential.id, 'Souvenir', session.title, session.detail, holder, issuedAt, null, 'Activa', issuedAt, JSON.stringify(credential))
+      db.prepare('insert into reward_claims (code, student_id, credential_id) values (?, ?, ?)').run(request.params.code, actor.studentId, credential.id)
+      db.prepare('insert or ignore into wallet_bindings (holder, public_key, created_at) values (?, ?, ?)').run(holder, walletPublicKey, issuedAt)
+    })()
+  } catch {
+    const claimed = db.prepare('select c.credential_json as credentialJson from reward_claims rc join credentials c on c.id = rc.credential_id where rc.code = ? and rc.student_id = ?').get(request.params.code, actor.studentId) as { credentialJson: string } | undefined
+    if (!claimed) throw new Error('No se pudo guardar el souvenir.')
+    return { credential: JSON.parse(claimed.credentialJson) as SignedCredential, alreadyClaimed: true }
+  }
+  return { credential }
+})
+
+app.post<{ Body: { kind: string; title: string; detail?: string; grade?: number; holder?: string; studentId?: string; validityDays?: number; expiresAt?: string | null } }>('/api/credentials', async (request, reply) => {
   const actor = requireRole(request, reply, ['institutional'])
   if (!actor) return
   const { kind, title } = request.body ?? {}
-  if (!kind || !title?.trim()) return reply.code(400).send({ message: 'Completá el tipo y la materia o el servicio.' })
+  if (!kind || !title?.trim()) return reply.code(400).send({ message: kind === 'Regularidad' ? 'Completá la materia para emitir una regularidad.' : 'Completá el tipo y la materia o el servicio.' })
   if (kind === 'Nota de materia' && (!Number.isFinite(request.body.grade) || (request.body.grade as number) < 1 || (request.body.grade as number) > 10)) return reply.code(400).send({ message: 'Ingresá una nota válida entre 1 y 10.' })
+  const validityDays = request.body.validityDays
+  if (validityDays !== undefined && (!Number.isInteger(validityDays) || validityDays < 1 || validityDays > 36500)) return reply.code(400).send({ message: 'La vigencia debe indicarse en días enteros entre 1 y 36500.' })
   const detail = kind === 'Nota de materia' ? `Nota: ${request.body.grade}` : request.body.detail?.trim()
   if (!detail) return reply.code(400).send({ message: 'Completá el detalle de la credencial.' })
-  const permittedKinds: Record<string, string[]> = { academic: ['Regularidad', 'Materia aprobada', 'Nota de materia'], library: ['Biblioteca'], gym: ['Gimnasio'] }
+  const permittedKinds: Record<string, string[]> = { academic: ['Alumno regular', 'Regularidad', 'Materia aprobada', 'Nota de materia'], library: ['Biblioteca'], gym: ['Gimnasio'] }
   if (!actor.scope || !permittedKinds[actor.scope]?.includes(kind)) return reply.code(403).send({ message: 'Este usuario institucional no puede emitir ese tipo de credencial.' })
   const studentId = request.body.studentId ?? demoStudents[0].id
   const student = db.prepare('select id, full_name as fullName, enrollment_number as enrollmentNumber from students where id = ?').get(studentId) as { id: string; fullName: string; enrollmentNumber: string } | undefined
   if (!student) return reply.code(404).send({ message: 'Elegí un estudiante válido.' })
   const issuedAt = new Date().toISOString()
+  const credentialExpiresAt = validityDays === undefined ? undefined : new Date(Date.parse(issuedAt) + validityDays * 24 * 60 * 60_000).toISOString()
   const credential = signCredential({
     id: randomUUID(), type: kind, issuer: 'did:web:unlar.edu.ar:prototipo', holder: `did:unlar:student:${student.id}`,
-    claims: { titulo: title.trim(), detalle: detail, ...(kind === 'Nota de materia' ? { nota: String(request.body.grade) } : {}), estudianteId: student.id, matricula: student.enrollmentNumber, nombreEstudiante: student.fullName }, issuedAt, ...(request.body.expiresAt ? { expiresAt: request.body.expiresAt } : {}),
+    claims: { titulo: title.trim(), detalle: detail, ...(['Regularidad', 'Materia aprobada', 'Nota de materia'].includes(kind) ? { materia: title.trim() } : {}), ...(kind === 'Nota de materia' ? { nota: String(request.body.grade) } : {}), estudianteId: student.id, matricula: student.enrollmentNumber, nombreEstudiante: student.fullName }, issuedAt, ...(credentialExpiresAt ? { expiresAt: credentialExpiresAt } : {}),
   })
   db.prepare('insert into credentials (id, kind, title, detail, holder, issued_at, expires_at, status, created_at, credential_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(credential.id, kind, title.trim(), detail, credential.holder, issuedAt, credential.expiresAt ?? null, 'Activa', issuedAt, JSON.stringify(credential))
@@ -313,44 +541,84 @@ app.post<{ Params: { id: string } }>('/api/credentials/:id/revoke', async (reque
   const actor = requireRole(request, reply, ['institutional'])
   if (!actor) return
   const credential = db.prepare('select kind from credentials where id = ?').get(request.params.id) as { kind: string } | undefined
-  const permittedKinds: Record<string, string[]> = { academic: ['Regularidad', 'Materia aprobada', 'Nota de materia'], library: ['Biblioteca'], gym: ['Gimnasio'] }
+  const permittedKinds: Record<string, string[]> = { academic: ['Alumno regular', 'Regularidad', 'Materia aprobada', 'Nota de materia'], library: ['Biblioteca'], gym: ['Gimnasio'] }
   if (credential && (!actor.scope || !permittedKinds[actor.scope]?.includes(credential.kind))) return reply.code(403).send({ message: 'No tenés permiso para revocar esta credencial.' })
   const result = db.prepare('update credentials set status = ? where id = ?').run('Revocada', request.params.id)
   if (!result.changes) return reply.code(404).send({ message: 'Credencial inexistente' })
   return { id: request.params.id, status: 'Revocada' }
 })
 
-app.post<{ Body: { kind: string; minutes?: number } }>('/api/presentation-requests', async (request, reply) => {
+app.delete<{ Params: { id: string } }>('/api/credentials/:id', async (request, reply) => {
+  const actor = requireRole(request, reply, ['institutional'])
+  if (!actor) return
+  const credential = db.prepare('select kind from credentials where id = ?').get(request.params.id) as { kind: string } | undefined
+  if (!credential) return reply.code(404).send({ message: 'Credencial inexistente.' })
+  const permittedKinds: Record<string, string[]> = { academic: ['Alumno regular', 'Regularidad', 'Materia aprobada', 'Nota de materia'], library: ['Biblioteca'], gym: ['Gimnasio'] }
+  if (!actor.scope || !permittedKinds[actor.scope]?.includes(credential.kind)) return reply.code(403).send({ message: 'No tenés permiso para eliminar esta credencial.' })
+  const deleted = db.transaction(() => {
+    db.prepare('delete from credential_deliveries where credential_id = ?').run(request.params.id)
+    return db.prepare('delete from credentials where id = ?').run(request.params.id).changes
+  })()
+  if (!deleted) return reply.code(404).send({ message: 'Credencial inexistente.' })
+  return { id: request.params.id, deleted: true }
+})
+
+app.post<{ Body: { kind: string; subject?: string; minimumGrade?: number; requestNote?: string; requiredClaims?: string[]; includeExactGrade?: boolean; minutes?: number } }>('/api/presentation-requests', async (request, reply) => {
   if (!requireRole(request, reply, ['teacher', 'institutional'])) return
   if (!request.body?.kind) return reply.code(400).send({ message: 'Indicá el tipo de credencial requerido.' })
+  const subject = request.body.subject?.trim() || null
+  const minimumGrade = request.body.minimumGrade
+  const requestNote = request.body.requestNote?.trim() || null
+  const allowedClaims = new Set(['nombreEstudiante', 'matricula', 'titulo', 'detalle', 'materia', 'nota'])
+  const requiredClaims = [...new Set(request.body.requiredClaims ?? [])]
+  if (requiredClaims.some((claim) => !allowedClaims.has(claim))) return reply.code(400).send({ message: 'La solicitud contiene un dato no permitido.' })
+  if (request.body.includeExactGrade && !requiredClaims.includes('nota')) requiredClaims.push('nota')
+  if (subject && subject.length > 120) return reply.code(400).send({ message: 'La materia debe tener como máximo 120 caracteres.' })
+  if (request.body.kind === 'Nota de materia' && minimumGrade !== undefined && (!Number.isFinite(minimumGrade) || minimumGrade < 1 || minimumGrade > 10)) return reply.code(400).send({ message: 'La nota mínima debe estar entre 1 y 10.' })
+  if (request.body.kind !== 'Nota de materia' && minimumGrade !== undefined) return reply.code(400).send({ message: 'La nota mínima solo se puede pedir para una nota de materia.' })
+  if (requestNote && requestNote.length > 300) return reply.code(400).send({ message: 'El detalle debe tener como máximo 300 caracteres.' })
   const code = newCode()
   const minutes = Math.min(Math.max(request.body.minutes ?? 2, 1), 5)
   const expiresAt = new Date(Date.now() + minutes * 60_000).toISOString()
-  db.prepare('insert into presentation_requests (code, kind, expires_at) values (?, ?, ?)').run(code, request.body.kind, expiresAt)
-  return reply.code(201).send({ code, kind: request.body.kind, expiresAt })
+  db.prepare('insert into presentation_requests (code, kind, subject, minimum_grade, request_note, required_claims, include_exact_grade, expires_at) values (?, ?, ?, ?, ?, ?, ?, ?)').run(code, request.body.kind, subject, minimumGrade ?? null, requestNote, JSON.stringify(requiredClaims), request.body.includeExactGrade ? 1 : 0, expiresAt)
+  return reply.code(201).send({ code, kind: request.body.kind, subject, minimumGrade: minimumGrade ?? null, requestNote, requiredClaims, includeExactGrade: Boolean(request.body.includeExactGrade), expiresAt })
 })
 
 app.get<{ Params: { code: string } }>('/api/presentation-requests/:code', async (request, reply) => {
   if (!requireRole(request, reply, ['student'])) return
-  const row = db.prepare('select kind, expires_at as expiresAt, status from presentation_requests where code = ?').get(request.params.code) as { kind: string; expiresAt: string; status: string } | undefined
+  const row = db.prepare('select kind, subject, minimum_grade as minimumGrade, request_note as requestNote, required_claims as requiredClaimsJson, include_exact_grade as includeExactGrade, expires_at as expiresAt, status from presentation_requests where code = ?').get(request.params.code) as { kind: string; subject: string | null; minimumGrade: number | null; requestNote: string | null; requiredClaimsJson: string; includeExactGrade: number; expiresAt: string; status: string } | undefined
   if (!row) return reply.code(404).send({ message: 'La solicitud no existe.' })
   if (Date.parse(row.expiresAt) <= Date.now() || row.status !== 'Abierta') return reply.code(410).send({ message: 'La solicitud venció o ya fue utilizada.' })
-  return { code: request.params.code, ...row }
+  const { requiredClaimsJson, ...publicRow } = row
+  return { code: request.params.code, ...publicRow, requiredClaims: JSON.parse(requiredClaimsJson), includeExactGrade: Boolean(row.includeExactGrade) }
 })
 
 app.post<{ Params: { code: string }; Body: { credential: SignedCredential; walletPublicKey: string; holderSignature: string } }>('/api/presentation-requests/:code/respond', async (request, reply) => {
   const actor = requireRole(request, reply, ['student'])
   if (!actor?.studentId) return
-  const row = db.prepare('select kind, expires_at as expiresAt, status from presentation_requests where code = ?').get(request.params.code) as { kind: string; expiresAt: string; status: string } | undefined
+  const row = db.prepare('select kind, subject, minimum_grade as minimumGrade, required_claims as requiredClaimsJson, expires_at as expiresAt, status from presentation_requests where code = ?').get(request.params.code) as { kind: string; subject: string | null; minimumGrade: number | null; requiredClaimsJson: string; expiresAt: string; status: string } | undefined
   if (!row || row.status !== 'Abierta') return reply.code(410).send({ message: 'La solicitud venció o ya fue respondida.' })
   if (Date.parse(row.expiresAt) <= Date.now()) return reply.code(410).send({ message: 'La solicitud de verificación venció.' })
   const { credential, walletPublicKey, holderSignature } = request.body ?? {}
   if (!credential || !walletPublicKey || !holderSignature) return reply.code(400).send({ message: 'Falta la credencial o la prueba de posesión de la billetera.' })
   if (credential.type !== row.kind) return reply.code(422).send({ message: `Se solicitó ${row.kind} y se presentó ${credential.type}.` })
-  if (credential.claims.estudianteId !== actor.studentId || credential.holder !== `did:unlar:student:${actor.studentId}`) return reply.code(403).send({ message: 'Esta credencial no pertenece al perfil de estudiante activo.' })
-  if (!verifyCredential(credential)) return reply.code(422).send({ message: 'La firma del emisor no es válida.' })
-  const stored = db.prepare('select status, expires_at from credentials where id = ?').get(credential.id) as { status: string; expires_at: string | null } | undefined
-  if (!stored || stored.status !== 'Activa') return reply.code(422).send({ message: 'La credencial fue revocada o no figura en el registro del emisor.' })
+  const normalizeSubject = (value: string) => value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-AR')
+  const stored = db.prepare('select status, expires_at, credential_json as credentialJson from credentials where id = ?').get(credential.id) as { status: string; expires_at: string | null; credentialJson: string | null } | undefined
+  if (!stored || stored.status !== 'Activa' || !stored.credentialJson) return reply.code(422).send({ message: 'La credencial fue revocada o no figura en el registro del emisor.' })
+  const issuedCredential = JSON.parse(stored.credentialJson) as SignedCredential
+  if (!verifyCredential(issuedCredential) || credential.holder !== issuedCredential.holder) return reply.code(422).send({ message: 'La firma del emisor o el titular no son válidos.' })
+  for (const required of [...(row.subject ? ['materia'] : []), ...(row.minimumGrade != null ? [`cumpleNotaMinima${row.minimumGrade}`] : [])]) {
+    if (!(required in (credential.claims ?? {}))) return reply.code(422).send({ message: 'Falta un dato solicitado por el verificador.' })
+  }
+  for (const [key, value] of Object.entries(credential.claims ?? {})) {
+    const threshold = /^cumpleNotaMinima(\d+(?:\.\d+)?)$/.exec(key)
+    const expected = threshold ? String(Number(issuedCredential.claims.nota) >= Number(threshold[1])) : key === 'materia' ? issuedCredential.claims.materia ?? issuedCredential.claims.titulo : issuedCredential.claims[key]
+    if (expected === undefined || expected !== value) return reply.code(422).send({ message: 'Los datos compartidos no coinciden con la credencial emitida.' })
+  }
+  const credentialSubject = issuedCredential.claims.materia ?? issuedCredential.claims.titulo ?? ''
+  if (row.subject && normalizeSubject(credentialSubject) !== normalizeSubject(row.subject)) return reply.code(422).send({ message: `Se solicitó una credencial de ${row.subject}.` })
+  if (row.minimumGrade !== null && row.minimumGrade !== undefined && !Number.isFinite(Number(issuedCredential.claims.nota))) return reply.code(422).send({ message: 'La credencial no contiene una nota verificable.' })
+  if (issuedCredential.claims.estudianteId !== actor.studentId || credential.holder !== `did:unlar:student:${actor.studentId}`) return reply.code(403).send({ message: 'Esta credencial no pertenece al perfil de estudiante activo.' })
   if ((stored.expires_at && Date.parse(stored.expires_at) <= Date.now()) || (credential.expiresAt && Date.parse(credential.expiresAt) <= Date.now())) return reply.code(422).send({ message: 'La credencial venció.' })
   try {
     const binding = db.prepare('select public_key from wallet_bindings where holder = ?').get(credential.holder) as { public_key: string } | undefined
@@ -359,7 +627,8 @@ app.post<{ Params: { code: string }; Body: { credential: SignedCredential; walle
     const proofMessage = `${request.params.code}.${credential.id}.${credential.holder}`
     if (!verify(null, Buffer.from(proofMessage), proofKey, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'La prueba de posesión de la billetera no es válida.' })
   } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
-  const result = { valid: true, credentialId: credential.id, title: credential.claims.titulo, kind: credential.type, verifiedAt: new Date().toISOString() }
+  const minimumGradeMet = row.minimumGrade !== null && row.minimumGrade !== undefined ? Number(issuedCredential.claims.nota) >= row.minimumGrade : undefined
+  const result = { valid: true, credentialId: credential.id, title: credential.claims.titulo ?? credential.claims.materia ?? credential.type, kind: credential.type, subject: credential.claims.materia, grade: credential.claims.nota, minimumGrade: row.minimumGrade, minimumGradeMet, studentName: credential.claims.nombreEstudiante, verifiedAt: new Date().toISOString() }
   const changed = db.prepare('update presentation_requests set status = ?, result_json = ? where code = ? and status = ?').run('Respondida', JSON.stringify(result), request.params.code, 'Abierta')
   if (!changed.changes) return reply.code(409).send({ message: 'La solicitud ya fue respondida.' })
   return result
@@ -385,14 +654,14 @@ app.post<{ Body: { subject: string; section?: string; minutes?: number } }>('/ap
 })
 
 app.get<{ Params: { id: string } }>('/api/attendance/sessions/:id', async (request, reply) => {
-  if (!requireRole(request, reply, ['student'])) return
+  if (!requireRole(request, reply, ['student', 'photographer'])) return
   const session = db.prepare('select id, subject, section, expires_at as expiresAt, status from attendance_sessions where id = ?').get(request.params.id) as AttendanceSessionRow | undefined
   if (!session || session.status !== 'Abierta' || Date.parse(session.expiresAt) <= Date.now()) return reply.code(410).send({ message: 'La sesión de asistencia venció o fue cerrada.' })
   return session
 })
 
 app.post<{ Params: { id: string }; Body: { studentId?: string; walletPublicKey?: string; holderSignature?: string } }>('/api/attendance/sessions/:id/check-in', async (request, reply) => {
-  const actor = requireRole(request, reply, ['student'])
+  const actor = requireRole(request, reply, ['student', 'photographer'])
   if (!actor?.studentId) return
   const session = db.prepare('select * from attendance_sessions where id = ?').get(request.params.id) as { expires_at: string; status: string } | undefined
   if (!session || session.status !== 'Abierta') return reply.code(404).send({ message: 'Sesión no disponible.' })
@@ -402,6 +671,7 @@ app.post<{ Params: { id: string }; Body: { studentId?: string; walletPublicKey?:
   if (!studentId || !walletPublicKey || !holderSignature) return reply.code(400).send({ message: 'Completá tus datos y registrá la billetera antes de marcar asistencia.' })
   const student = db.prepare('select id, full_name as fullName, wallet_public_key as walletPublicKey from students where id = ?').get(studentId) as { id: string; fullName: string; walletPublicKey: string | null } | undefined
   if (!student) return reply.code(404).send({ message: 'No se encontró el perfil del estudiante.' })
+  if (student.walletPublicKey !== walletPublicKey) return reply.code(403).send({ message: 'Esta billetera no está vinculada al perfil registrado.' })
   try {
     const proofKey = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
     const proofMessage = `attendance.${request.params.id}.${student.id}`

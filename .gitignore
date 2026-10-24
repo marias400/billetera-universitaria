@@ -13,6 +13,9 @@ node_modules
 dist
 dist-ssr
 .presentation-build/
+.codex-presentation-build/
+.codex-finalizer/
+*.inspect.ndjson
 *.local
 data/
 certs/local-dev/

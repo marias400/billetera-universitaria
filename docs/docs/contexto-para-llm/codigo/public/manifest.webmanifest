@@ -1,0 +1,12 @@
+{
+  "name": "Billetera Universitaria UNLaR",
+  "short_name": "Billetera UNLaR",
+  "description": "Prototipo académico de credenciales universitarias verificables",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fa",
+  "theme_color": "#1d5b96",
+  "icons": [
+    { "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

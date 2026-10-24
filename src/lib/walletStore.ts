@@ -8,10 +8,18 @@ const database = openDB('unlar-wallet', 2, {
   },
 })
 
-export type WalletCredential = SignedCredential & { localStatus: 'Activa' | 'Revocada' }
+export type WalletCredential = SignedCredential & { localStatus: 'Activa' | 'Revocada' | 'No registrada' }
 
 export async function listWalletCredentials() {
   return (await database).getAll('credentials') as Promise<WalletCredential[]>
+}
+
+export async function clearWalletCredentials() {
+  await (await database).clear('credentials')
+}
+
+export async function removeWalletCredential(id: string) {
+  await (await database).delete('credentials', id)
 }
 
 export async function storeWalletCredential(credential: SignedCredential) {
@@ -20,7 +28,7 @@ export async function storeWalletCredential(credential: SignedCredential) {
   await db.put('credentials', { ...credential, localStatus: current?.localStatus ?? 'Activa' })
 }
 
-export async function updateWalletCredentialStatus(id: string, status: 'Activa' | 'Revocada') {
+export async function updateWalletCredentialStatus(id: string, status: WalletCredential['localStatus']) {
   const db = await database
   const current = await db.get('credentials', id) as WalletCredential | undefined
   if (current) await db.put('credentials', { ...current, localStatus: status })

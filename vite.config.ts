@@ -11,6 +11,16 @@ export default defineConfig({
       key: readFileSync('./certs/local-dev/server-key.pem'),
       cert: readFileSync('./certs/local-dev/server-cert.pem'),
     },
-    proxy: { '/api': 'http://127.0.0.1:4001', '/health': 'http://127.0.0.1:4001' },
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:4001',
+        configure(proxy) {
+          proxy.on('proxyReq', (proxyRequest, request) => {
+            proxyRequest.setHeader('x-forwarded-for', request.socket.remoteAddress ?? '')
+          })
+        },
+      },
+      '/health': 'http://127.0.0.1:4001',
+    },
   },
 })
