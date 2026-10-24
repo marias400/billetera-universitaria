@@ -1025,7 +1025,7 @@ function App() {
       </header>
 
       <section className="hero">
-        <div>
+        <div className="hero-main">
           <p className="eyebrow">Billetera Universitaria Digital</p>
           <h1>Tus credenciales universitarias, bajo tu control.</h1>
           <p className="lead">Gestioná tus certificados académicos, accesos a servicios y registro de asistencia en una billetera digital segura y privada.</p>
@@ -1482,69 +1482,136 @@ function App() {
       )}
 
       {activeTab === 'connection' && (
-        <section className="attendance-page">
-          <div className="panel roster-panel">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Conectividad · Aula presencial</p>
-                <h2>Acceso a la red y a la billetera</h2>
+        <section className="connection-section">
+          <div className="connection-header">
+            <p className="eyebrow">Conectividad · Aula presencial</p>
+            <h2>Acceso a la red y a la billetera</h2>
+            <p className="connection-lead">
+              Facilitá la conexión de los asistentes en dos pasos simples: primero pueden conectarse a la red Wi-Fi del aula y luego abrir la billetera en sus teléfonos para participar activamente de la clase.
+            </p>
+          </div>
+
+          <div className="connection-grid">
+            <div className="panel connection-config-panel">
+              <div className="connection-panel-title">
+                <div className="panel-step-badge">
+                  <span className="step-num">1</span>
+                  <span>Configuración de red</span>
+                </div>
+                <h3>Parámetros del Wi-Fi</h3>
               </div>
-            </div>
-            <p className="muted">Estos códigos QR facilitan la conexión de los asistentes: primero pueden conectarse a la red Wi-Fi del aula y luego abrir la billetera en sus teléfonos.</p>
-            <div className="layout verify-layout">
-              <div className="form-panel">
+
+              <div className="connection-form">
                 <label>
-                  Nombre de la red Wi-Fi (SSID)
+                  <span>Nombre de la red Wi-Fi (SSID)</span>
                   <input
                     value={networkInfo.ssid || wifiSsidOverride}
                     onChange={(event) => { setWifiSsidOverride(event.target.value); setShowWifiQr(false) }}
                     readOnly={Boolean(networkInfo.ssid)}
                     placeholder="Ingresá el nombre exacto de la red Wi-Fi"
                   />
+                  {networkInfo.ssid ? (
+                    <span className="connection-badge-detected">✓ Detectada automáticamente</span>
+                  ) : (
+                    <p className="muted small-tip">El sistema no detectó automáticamente el nombre. Ingresalo tal como figura en los ajustes de red.</p>
+                  )}
                 </label>
-                {!networkInfo.ssid && (
-                  <p className="muted">El sistema no detectó automáticamente el nombre del Wi-Fi. Ingresalo tal como figura en los ajustes de red para generar el QR.</p>
-                )}
+
                 <label>
-                  Seguridad de la red
-                  <select value={wifiSecurity} onChange={(event) => { setWifiSecurity(event.target.value as 'WPA' | 'nopass'); setShowWifiQr(false) }}>
-                    <option value="WPA">Red protegida con contraseña (WPA / WPA2)</option>
+                  <span>Seguridad de la red</span>
+                  <select
+                    value={wifiSecurity}
+                    onChange={(event) => { setWifiSecurity(event.target.value as 'WPA' | 'nopass'); setShowWifiQr(false) }}
+                  >
+                    <option value="WPA">Red protegida con contraseña (WPA / WPA2 / WPA3)</option>
                     <option value="nopass">Red abierta (sin contraseña)</option>
                   </select>
                 </label>
+
                 {wifiSecurity === 'WPA' && (
                   <label>
-                    Contraseña de la red Wi-Fi
+                    <span>Contraseña de la red Wi-Fi</span>
                     <input
                       type="password"
                       autoComplete="new-password"
                       value={wifiPassword}
                       onChange={(event) => { setWifiPassword(event.target.value); setShowWifiQr(false) }}
-                      placeholder="Ingresá la clave de la red"
+                      placeholder="Ingresá la clave de acceso"
                     />
                   </label>
                 )}
-                <p className="muted">La contraseña solo se utiliza para generar el código QR en esta pantalla; no se almacena en el servidor.</p>
+
+                <div className="connection-security-note">
+                  <span className="security-icon" aria-hidden="true">🔒</span>
+                  <p>La contraseña solo se utiliza para generar el código QR en esta pantalla; no se almacena ni transmite al servidor.</p>
+                </div>
+
                 <button
                   type="button"
-                  className="primary-button"
+                  className="primary-button connection-generate-btn"
                   onClick={() => setShowWifiQr(true)}
                   disabled={!wifiSsid || (wifiSecurity === 'WPA' && !wifiPassword)}
                 >
-                  Generar código QR de Wi-Fi
+                  {showWifiQr && wifiQr ? '✓ Código QR de Wi-Fi generado' : 'Generar código QR de Wi-Fi'}
                 </button>
               </div>
-              <div className="request-panel companion-qrs">
-                {showWifiQr && wifiQr ? (
-                  <QrDisplay value={wifiQr} label={`Wi-Fi · ${wifiSsid}${wifiSecurity === 'nopass' ? ' (red abierta)' : ''}`} />
-                ) : (
-                  <div>
-                    <span className="qr-placeholder">▦</span>
-                    <small>Configurá la red para generar el código QR de Wi-Fi</small>
+            </div>
+
+            <div className="connection-qrs-column">
+              <div className={`connection-qr-card ${showWifiQr && wifiQr ? 'active' : 'waiting'}`}>
+                <div className="connection-card-header">
+                  <div className="connection-qr-badge step-1">
+                    <span className="step-indicator">Paso 1</span>
+                    <strong>📶 Conexión Wi-Fi</strong>
                   </div>
-                )}
-                <QrDisplay value={localAppUrl} label="Escanear para abrir la billetera" />
-                <small>Dirección local en el aula: {localAppUrl}</small>
+                  {wifiSsid && (
+                    <span className="connection-ssid-tag">
+                      Red: <strong>{wifiSsid}</strong> {wifiSecurity === 'nopass' ? '(abierta)' : ''}
+                    </span>
+                  )}
+                </div>
+
+                <div className="connection-qr-body">
+                  {showWifiQr && wifiQr ? (
+                    <div className="connection-qr-frame-wrapper">
+                      <QrDisplay value={wifiQr} label={`Wi-Fi · ${wifiSsid}${wifiSecurity === 'nopass' ? ' (red abierta)' : ''}`} />
+                      <p className="connection-qr-instruction">
+                        Los asistentes escanean este código con la cámara de su teléfono para conectarse a la red sin ingresar la clave manualmente.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="connection-qr-waiting">
+                      <span className="qr-placeholder">📶</span>
+                      <div className="waiting-text">
+                        <h4>Esperando configuración de red</h4>
+                        <p>Completá los datos del Wi-Fi en el panel izquierdo y hacé clic en "Generar código QR" para proyectarlo.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="connection-qr-card connection-app-card active">
+                <div className="connection-card-header">
+                  <div className="connection-qr-badge step-2">
+                    <span className="step-indicator">Paso 2</span>
+                    <strong>📲 Billetera Universitaria</strong>
+                  </div>
+                  <span className="connection-live-tag">En vivo en red local</span>
+                </div>
+
+                <div className="connection-qr-body">
+                  <div className="connection-qr-frame-wrapper">
+                    <QrDisplay value={localAppUrl} label="Escanear para abrir la billetera" />
+                    <div className="connection-url-box">
+                      <span className="connection-url-label">Dirección local en el aula:</span>
+                      <code className="connection-url-code">{localAppUrl}</code>
+                    </div>
+                    <p className="connection-qr-instruction">
+                      Una vez conectados al Wi-Fi del aula, los asistentes escanean este código con su teléfono para abrir la billetera digital.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
