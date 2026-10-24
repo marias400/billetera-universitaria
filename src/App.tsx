@@ -190,8 +190,26 @@ function QrDisplay({ value, label }: { value: string; label: string }) {
 
 function SouvenirQrDisplay({ value }: { value: string }) {
   const [image, setImage] = useState('')
-  useEffect(() => { void QRCode.toDataURL(value, { width: 520, margin: 2, errorCorrectionLevel: 'H', color: { dark: '#76510d', light: '#fff5cf' } }).then(setImage) }, [value])
-  return <div className="souvenir-main-qr">{image ? <img src={image} alt="Código QR del souvenir personalizado" /> : <span>✦</span>}<strong>Escaneá el QR para llevarte tu souvenir</strong></div>
+  useEffect(() => {
+    void QRCode.toDataURL(value, {
+      width: 520,
+      margin: 2,
+      errorCorrectionLevel: 'H',
+      color: { dark: '#422800', light: '#fff9e8' },
+    }).then(setImage)
+  }, [value])
+  return (
+    <div className="souvenir-main-qr">
+      <div className="souvenir-qr-card-frame">
+        <div className="souvenir-corner-star tl">✦</div>
+        <div className="souvenir-corner-star tr">✦</div>
+        <div className="souvenir-corner-star bl">✦</div>
+        <div className="souvenir-corner-star br">✦</div>
+        {image ? <img src={image} alt="Código QR del souvenir personalizado" /> : <span className="souvenir-placeholder-star">✦</span>}
+      </div>
+      <strong>Escaneá el QR con tu billetera para recibir tu recuerdo</strong>
+    </div>
+  )
 }
 
 function LoadingMark({ label = 'Cargando' }: { label?: string }) {
@@ -1219,7 +1237,54 @@ function App() {
 
       {pendingVerify && <div className="consent-backdrop"><section className="consent-card" role="dialog" aria-modal="true"><p className="eyebrow">Solicitud del verificador</p><h2>Elegí qué datos compartir</h2><p>Se solicita: <strong>{pendingVerify.kind}</strong>{pendingVerify.subject && <> de <strong>{pendingVerify.subject}</strong></>}{pendingVerify.minimumGrade != null && <> · nota mínima <strong>{pendingVerify.minimumGrade}</strong></>}</p>{pendingVerify.requestNote && <p>Detalle: {pendingVerify.requestNote}</p>}{matchingVerificationCredentials.map((credential) => { const choices: [string, string][] = [['nombreEstudiante', 'Nombre'], ['matricula', 'Matrícula'], ['titulo', 'Título'], ['detalle', 'Detalle'], ['materia', 'Materia'], ['nota', 'Nota exacta']]; if (pendingVerify.minimumGrade != null) choices.push([`cumpleNotaMinima${pendingVerify.minimumGrade}`, `¿Cumple la nota mínima ${pendingVerify.minimumGrade}?`]); return <div className="consent-credential" key={credential.id}><span className="credential-icon">{iconFor(credential.type as CredentialKind)}</span><div><strong>{credential.claims.titulo}</strong><p>{choices.filter(([key]) => key in credential.claims || key.startsWith('cumpleNotaMinima')).map(([key, label]) => <label className="disclosure-choice" key={key}><input type="checkbox" checked={Boolean(shareFields[key])} disabled={Boolean(pendingVerify.subject && key === 'materia') || (pendingVerify.minimumGrade != null && key.startsWith('cumpleNotaMinima'))} onChange={(event) => setShareFields((current) => ({ ...current, [key]: event.target.checked }))} />{label}{(pendingVerify.requiredClaims ?? []).includes(key) && <small> · solicitado, podés desactivarlo</small>}{key.startsWith('cumpleNotaMinima') && <small> · {Number(credential.claims.nota) >= pendingVerify.minimumGrade! ? 'Sí' : 'No'}</small>}</label>)}</p></div></div>})}{!matchingVerificationCredentials.length && <p className="scanner-error">No tenés una credencial activa que cumpla estos requisitos.</p>}{verifyShareError && <p className="consent-error" role="alert">No se pudo compartir: {verifyShareError}</p>}<div className="consent-actions"><button type="button" className="secondary-button" onClick={() => { setPendingVerify(null); setNotice('Rechazaste compartir la credencial.') }}>Rechazar</button>{matchingVerificationCredentials.map((credential) => <button type="button" className="primary-button" key={credential.id} disabled={working} onClick={() => void shareCredential(credential)}>{working ? <><span className="button-spinner" /> Enviando…</> : 'Confirmar y compartir'}</button>)}</div></section></div>}
       {pendingAttendance && <div className="consent-backdrop"><section className="consent-card" role="dialog" aria-modal="true"><p className="eyebrow">Confirmar asistencia</p><h2>{pendingAttendance.subject}</h2><p>{pendingAttendance.section} · sesión temporal del profesor</p><p>Se registrará la presencia de <strong>{savedStudent?.fullName ?? 'un estudiante sin identificar'}</strong> usando una prueba criptográfica de esta billetera. No se comparten notas ni otras credenciales.</p>{attendanceError && <p className="consent-error" role="alert">No se pudo registrar: {attendanceError}</p>}<div className="consent-actions"><button type="button" className="secondary-button" onClick={() => { setPendingAttendance(null); setAttendanceError(''); setNotice('Cancelaste el registro de asistencia.') }}>Cancelar</button><button type="button" className="primary-button" disabled={working} onClick={() => void confirmAttendance()}>{working ? 'Registrando…' : 'Confirmar presencia'}</button></div></section></div>}
-      {activeTab === 'souvenir' && souvenirQrOpen && souvenirSession && <div className="souvenir-qr-backdrop"><section className="souvenir-qr-screen" role="dialog" aria-modal="true" aria-label="QR de souvenir para todos"><button type="button" className="souvenir-qr-close" onClick={() => setSouvenirQrOpen(false)}>Cerrar</button><div className="souvenir-qr-glow souvenir-qr-glow-one" /><div className="souvenir-qr-glow souvenir-qr-glow-two" /><div className="souvenir-qr-content"><div className="souvenir-qr-mark">✦</div><p className="eyebrow">UNLaR · Seminario de Actualización II</p><h2>Un recuerdo para llevarte</h2><p>Un mismo QR, un souvenir único para cada participante.</p><SouvenirQrDisplay value={qrPayload('souvenir', souvenirSession.code)} /><small>Vigente hasta {formatDate(souvenirSession.expiresAt)}</small></div></section></div>}
+      {activeTab === 'souvenir' && souvenirQrOpen && souvenirSession && (
+        <div className="souvenir-qr-backdrop">
+          <section className="souvenir-qr-screen" role="dialog" aria-modal="true" aria-label="QR de souvenir para todos">
+            <button type="button" className="souvenir-qr-close" onClick={() => setSouvenirQrOpen(false)}>
+              Cerrar ×
+            </button>
+
+            {/* Glowing nebulas */}
+            <div className="souvenir-qr-glow souvenir-qr-glow-one" />
+            <div className="souvenir-qr-glow souvenir-qr-glow-two" />
+            <div className="souvenir-qr-glow souvenir-qr-glow-three" />
+
+            {/* Celebratory Fireworks */}
+            <div className="qr-firework fw-top-left" />
+            <div className="qr-firework fw-top-right" />
+            <div className="qr-firework fw-bottom-left" />
+            <div className="qr-firework fw-bottom-right" />
+            <div className="qr-firework fw-center-left" />
+            <div className="qr-firework fw-center-right" />
+
+            {/* Floating Sparkles */}
+            <span className="qr-sparkle sp-1" aria-hidden="true">✦</span>
+            <span className="qr-sparkle sp-2" aria-hidden="true">✨</span>
+            <span className="qr-sparkle sp-3" aria-hidden="true">★</span>
+            <span className="qr-sparkle sp-4" aria-hidden="true">✧</span>
+            <span className="qr-sparkle sp-5" aria-hidden="true">✦</span>
+            <span className="qr-sparkle sp-6" aria-hidden="true">✨</span>
+            <span className="qr-sparkle sp-7" aria-hidden="true">★</span>
+            <span className="qr-sparkle sp-8" aria-hidden="true">✧</span>
+
+            {/* Centered Floating Content */}
+            <div className="souvenir-qr-content">
+              <div className="souvenir-qr-mark">✦</div>
+              <p className="eyebrow" style={{ color: '#ffe49e', letterSpacing: '0.15em' }}>UNLaR · SEMINARIO DE ACTUALIZACIÓN II</p>
+              <h2>Un recuerdo para llevarte</h2>
+              <p className="souvenir-subtitle">Un mismo código QR, un recuerdo único y personalizado para cada participante.</p>
+
+              <div className="souvenir-floating-card">
+                <SouvenirQrDisplay value={qrPayload('souvenir', souvenirSession.code)} />
+              </div>
+
+              <small className="souvenir-expiry-badge">
+                <span>⏱️</span> Válido hasta el {formatDate(souvenirSession.expiresAt)}
+              </small>
+            </div>
+          </section>
+        </div>
+      )}
       {souvenirPreview && <div className="souvenir-backdrop"><section className="souvenir-card" role="dialog" aria-modal="true" aria-label="Tu souvenir personalizado"><button type="button" className="souvenir-close" onClick={() => setSouvenirPreview(null)} aria-label="Cerrar">×</button><div className="souvenir-fireworks fireworks-one" /><div className="souvenir-fireworks fireworks-two" /><div className="souvenir-heading"><span>✦</span><h2>¡Un recuerdo para vos!</h2><p>Personalizado para {souvenirPreview.name}</p></div><img className="souvenir-image" src={souvenirPreview.image} alt={`Souvenir conmemorativo para ${souvenirPreview.name}`} /><div className="souvenir-actions"><button type="button" className="primary-button" onClick={downloadSouvenir}>Descargar imagen</button><button type="button" className="secondary-button" onClick={() => void shareSouvenir()}>Compartir</button></div><small>Guardalo o compartilo en WhatsApp, Instagram y tus apps favoritas.</small></section></div>}
       {scannerOpen && <QrScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />}
       <footer>Universidad Nacional de La Rioja · Credenciales digitales</footer>
