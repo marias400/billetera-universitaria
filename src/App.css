@@ -1742,6 +1742,8 @@ input:focus, select:focus, textarea:focus {
     grid-template-columns: 1fr;
     gap: 24px;
   }
+}
+
 /* --------------------------------------------------------------------------
    Institutional Issuer & Credential Records Ledger
    -------------------------------------------------------------------------- */
