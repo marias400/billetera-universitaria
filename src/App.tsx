@@ -23,8 +23,14 @@ type AttendanceRoster = {
 type NetworkInfo = { ssid: string; addresses: string[] }
 
 const kinds: CredentialKind[] = ['Alumno regular', 'Regularidad', 'Materia aprobada', 'Nota de materia', 'Biblioteca', 'Gimnasio']
-const tabs: { id: TabId; label: string }[] = [
-  { id: 'wallet', label: 'Mi billetera' }, { id: 'issuer', label: 'Emisor' }, { id: 'verify', label: 'Verificar' }, { id: 'attendance', label: 'Asistencia' }, { id: 'connection', label: 'Conexión' }, { id: 'souvenir', label: 'Souvenir' }, { id: 'class-photo', label: 'Foto de la clase' },
+const tabs: { id: TabId; label: string; icon: string }[] = [
+  { id: 'wallet', label: 'Mi billetera', icon: '🪪' },
+  { id: 'issuer', label: 'Emisor', icon: '🏛️' },
+  { id: 'verify', label: 'Verificar', icon: '🔍' },
+  { id: 'attendance', label: 'Asistencia', icon: '📋' },
+  { id: 'connection', label: 'Conexión', icon: '📶' },
+  { id: 'souvenir', label: 'Souvenir', icon: '✦' },
+  { id: 'class-photo', label: 'Foto de la clase', icon: '📷' },
 ]
 const demoAccounts = [
   { id: 'student-mariano', label: 'Estudiante · Mariano Arias Simone', role: 'student' },
@@ -34,7 +40,35 @@ const demoAccounts = [
   { id: 'admin-library', label: 'Institución · Biblioteca', role: 'institutional' },
   { id: 'admin-gym', label: 'Institución · Gimnasio', role: 'institutional' },
 ]
-const iconFor = (kind: CredentialKind) => ({ 'Alumno regular': '◇', 'Materia aprobada': '✓', 'Nota de materia': '▣', Regularidad: '◈', Biblioteca: '▤', Gimnasio: '◌', Souvenir: '✦' }[kind])
+const iconFor = (kind: CredentialKind) => ({
+  'Alumno regular': '🎓',
+  'Regularidad': '◈',
+  'Materia aprobada': '✓',
+  'Nota de materia': '★',
+  'Biblioteca': '📖',
+  'Gimnasio': '⚡',
+  'Souvenir': '✦',
+}[kind] ?? '◇')
+
+const cardThemeClass = (kind: string) => {
+  switch (kind) {
+    case 'Alumno regular':
+    case 'Regularidad':
+      return 'card-theme-regular'
+    case 'Materia aprobada':
+      return 'card-theme-aprobada'
+    case 'Nota de materia':
+      return 'card-theme-nota'
+    case 'Biblioteca':
+      return 'card-theme-biblioteca'
+    case 'Gimnasio':
+      return 'card-theme-gimnasio'
+    case 'Souvenir':
+      return 'card-theme-souvenir'
+    default:
+      return 'card-theme-default'
+  }
+}
 const qrPayload = (kind: string, code: string) => `unlar-wallet:${kind}:${code}`
 const formatDate = (value: string) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 const normalizeText = (value: string) => value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-AR')
@@ -132,14 +166,32 @@ async function createSouvenirImage(name: string, title: string, message: string,
 
 function QrDisplay({ value, label }: { value: string; label: string }) {
   const [image, setImage] = useState('')
-  useEffect(() => { void QRCode.toDataURL(value, { width: 240, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#113d60', light: '#ffffff' } }).then(setImage) }, [value])
-  return <div className="qr-display">{image ? <img src={image} alt={label} /> : <span className="qr-placeholder">▦</span>}<small>{label}</small></div>
+  useEffect(() => {
+    void QRCode.toDataURL(value, {
+      width: 280,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#0b1f3b', light: '#ffffff' },
+    }).then(setImage)
+  }, [value])
+  return (
+    <div className="qr-display">
+      <div className="qr-frame">
+        <div className="qr-corner tl" />
+        <div className="qr-corner tr" />
+        <div className="qr-corner bl" />
+        <div className="qr-corner br" />
+        {image ? <img src={image} alt={label} /> : <span className="qr-placeholder">▦</span>}
+      </div>
+      <small>{label}</small>
+    </div>
+  )
 }
 
 function SouvenirQrDisplay({ value }: { value: string }) {
   const [image, setImage] = useState('')
   useEffect(() => { void QRCode.toDataURL(value, { width: 520, margin: 2, errorCorrectionLevel: 'H', color: { dark: '#76510d', light: '#fff5cf' } }).then(setImage) }, [value])
-  return <div className="souvenir-main-qr">{image ? <img src={image} alt="Código QR del souvenir personalizado" /> : <span>✦</span>}<strong>Escanea el QR para llevarte tu souvenir</strong></div>
+  return <div className="souvenir-main-qr">{image ? <img src={image} alt="Código QR del souvenir personalizado" /> : <span>✦</span>}<strong>Escaneá el QR para llevarte tu souvenir</strong></div>
 }
 
 function LoadingMark({ label = 'Cargando' }: { label?: string }) {
@@ -169,7 +221,31 @@ function QrScanner({ onScan, onClose }: { onScan: (value: string) => void; onClo
     }
     return () => { cancelled = true; controls?.stop() }
   }, [browserError, onScan])
-  return <div className="scanner-backdrop"><section className="scanner-modal" role="dialog" aria-modal="true" aria-label="Escanear código QR"><div className="scanner-heading"><div><p className="eyebrow">Billetera UNLaR</p><h2>Escanear QR</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Cerrar">×</button></div><video ref={videoRef} className="scanner-video" muted playsInline />{(error || browserError) && <p className="scanner-error">{error || browserError}</p>}<p className="muted">Apuntá la cámara al código que muestra el otro celular.</p></section></div>
+  return (
+    <div className="scanner-backdrop">
+      <section className="scanner-modal" role="dialog" aria-modal="true" aria-label="Escanear código QR">
+        <div className="scanner-heading">
+          <div>
+            <p className="eyebrow">Billetera UNLaR</p>
+            <h2>Escanear QR</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Cerrar">×</button>
+        </div>
+        <div className="scanner-video-wrapper">
+          <video ref={videoRef} className="scanner-video" muted playsInline />
+          <div className="scanner-viewfinder">
+            <div className="viewfinder-corner top-left" />
+            <div className="viewfinder-corner top-right" />
+            <div className="viewfinder-corner bottom-left" />
+            <div className="viewfinder-corner bottom-right" />
+            <div className="scanner-laser" />
+          </div>
+        </div>
+        {(error || browserError) && <p className="scanner-error">{error || browserError}</p>}
+        <p className="muted" style={{ marginTop: 12 }}>Apuntá la cámara al código que muestra el otro dispositivo.</p>
+      </section>
+    </div>
+  )
 }
 
 function App() {
@@ -796,32 +872,319 @@ function App() {
     } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo cerrar la asistencia.') }
   }
 
-  if (!actor && sessionChecking) return <main className="login-page"><header className="topbar"><button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Ir a la página principal"><img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja" /></button></header><section className="login-card"><LoadingMark label="Recuperando tu billetera…" /></section></main>
-  if (!actor && !registrationMode && !guestAlreadyRegistered) return <main className="login-page"><header className="topbar"><button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Ir a la página principal"><img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja" /></button></header><section className="login-card"><p className="eyebrow">Acceso del responsable de la demo</p><h1>Ingresar</h1><p className="muted">Elegí el perfil del docente o de la institución para administrar la jornada.</p><label>Perfil<select value={loginAccount} onChange={(event) => setLoginAccount(event.target.value)}>{demoAccounts.filter((account) => account.role !== 'student').map((account) => <option value={account.id} key={account.id}>{account.label}</option>)}</select></label><label>Contraseña<input type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void login() }} /></label>{loginError && <p className="scanner-error">{loginError}</p>}<button type="button" className="primary-button" onClick={() => void login()} disabled={loginWorking}>{loginWorking && <span className="button-spinner" />}{loginWorking ? 'Ingresando…' : 'Ingresar'}</button></section><footer>Universidad Nacional de La Rioja · Credenciales digitales</footer></main>
-  if (!actor) return <main className="login-page"><header className="topbar"><button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Volver a la página principal"><img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja — volver al inicio" /></button></header><section className="login-card guest-register-card"><p className="eyebrow">Asistente · registro gratuito</p><h1>Registrate para la jornada</h1>{guestAlreadyRegistered ? <><p className="muted">Este navegador ya se registró para la demo. Tu billetera y tu nombre quedaron guardados en este dispositivo.</p><p className="muted">Volvé a la pantalla principal de la billetera para continuar. No es posible crear otro registro desde este navegador.</p>{guestRestoreError && <p className="scanner-error" role="alert">No se pudo recuperar la billetera: {guestRestoreError}</p>}<button type="button" className="primary-button" onClick={goToMainPage}>Ir a la página principal</button></> : <><p className="muted">Escribí tu nombre y apellido. Se creará una billetera en este teléfono y quedará vinculada a tu registro para asistencia y certificados.</p><label>Nombre y apellido<input autoComplete="name" value={guestName} onChange={(event) => setGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void registerGuest() }} placeholder="Ej.: Ana Pérez" maxLength={100} /></label>{guestError && <p className="scanner-error" role="alert">{guestError}</p>}<button type="button" className="primary-button" onClick={() => void registerGuest()} disabled={loginWorking}>{loginWorking && <span className="button-spinner" />}{loginWorking ? 'Creando tu billetera…' : 'Registrarme y crear billetera'}</button><p className="muted">La billetera queda guardada en este navegador. Usá el mismo teléfono para recibir tu certificado.</p></>}</section><footer>Universidad Nacional de La Rioja · Credenciales digitales</footer></main>
+  if (!actor && sessionChecking) {
+    return (
+      <main className="login-page">
+        <header className="topbar">
+          <button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Ir a la página principal">
+            <img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja" />
+          </button>
+        </header>
+        <section className="login-card">
+          <LoadingMark label="Recuperando tu billetera criptográfica…" />
+        </section>
+      </main>
+    )
+  }
+
+  if (!actor && !registrationMode && !guestAlreadyRegistered) {
+    return (
+      <main className="login-page">
+        <header className="topbar">
+          <button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Ir a la página principal">
+            <img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja" />
+          </button>
+        </header>
+        <section className="login-card">
+          <p className="eyebrow">Acceso institucional y docente</p>
+          <h1>Iniciar sesión</h1>
+          <p className="muted">Elegí el perfil docente o de área institucional para administrar la jornada y emitir credenciales.</p>
+          <label>
+            Perfil
+            <select value={loginAccount} onChange={(event) => setLoginAccount(event.target.value)}>
+              {demoAccounts.filter((account) => account.role !== 'student').map((account) => (
+                <option value={account.id} key={account.id}>{account.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Contraseña de laboratorio
+            <input
+              type="password"
+              value={loginPassword}
+              onChange={(event) => setLoginPassword(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter') void login() }}
+            />
+          </label>
+          {loginError && <p className="scanner-error">{loginError}</p>}
+          <button type="button" className="primary-button" onClick={() => void login()} disabled={loginWorking}>
+            {loginWorking && <span className="button-spinner" />}
+            {loginWorking ? 'Ingresando…' : 'Ingresar al sistema'}
+          </button>
+        </section>
+        <footer>Universidad Nacional de La Rioja · Billetera Universitaria Verificable</footer>
+      </main>
+    )
+  }
+
+  if (!actor) {
+    return (
+      <main className="login-page">
+        <header className="topbar">
+          <button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Volver a la página principal">
+            <img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja — volver al inicio" />
+          </button>
+        </header>
+        <section className="login-card guest-register-card">
+          <p className="eyebrow">Asistente · Registro inmediato</p>
+          <h1>Tu Billetera Universitaria</h1>
+          {guestAlreadyRegistered ? (
+            <>
+              <p className="muted">Este navegador ya se registró para la demo. Tu billetera y tu nombre quedaron guardados en este dispositivo con claves criptográficas Ed25519.</p>
+              <p className="muted">Volvé a la pantalla principal de la billetera para continuar. No es posible crear otro registro desde este navegador.</p>
+              {guestRestoreError && <p className="scanner-error" role="alert">No se pudo recuperar la billetera: {guestRestoreError}</p>}
+              <button type="button" className="primary-button" onClick={goToMainPage}>Ir a mi billetera</button>
+            </>
+          ) : (
+            <>
+              <p className="muted">Escribí tu nombre y apellido. Se generará un par de claves en este dispositivo y quedará vinculado para registrar asistencia y recibir credenciales verificables.</p>
+              <label>
+                Nombre y apellido
+                <input
+                  autoComplete="name"
+                  value={guestName}
+                  onChange={(event) => setGuestName(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') void registerGuest() }}
+                  placeholder="Ej.: Ana Pérez"
+                  maxLength={100}
+                />
+              </label>
+              {guestError && <p className="scanner-error" role="alert">{guestError}</p>}
+              <button type="button" className="primary-button" onClick={() => void registerGuest()} disabled={loginWorking}>
+                {loginWorking && <span className="button-spinner" />}
+                {loginWorking ? 'Creando claves y billetera…' : 'Crear mi billetera digital'}
+              </button>
+              <p className="muted" style={{ fontSize: '0.8rem' }}>La billetera se guarda localmente en IndexedDB. Usá este mismo dispositivo para presentar credenciales o recibir tu souvenir.</p>
+            </>
+          )}
+        </section>
+        <footer>Universidad Nacional de La Rioja · Credenciales digitales verificables</footer>
+      </main>
+    )
+  }
+
+  const noticeType = working
+    ? 'working'
+    : notice.toLowerCase().includes('error') || notice.toLowerCase().includes('rechaz') || notice.toLowerCase().includes('no se')
+      ? 'error'
+      : notice.toLowerCase().includes('guardad') || notice.toLowerCase().includes('verificad') || notice.toLowerCase().includes('registrad') || notice.toLowerCase().includes('emitid') || notice.toLowerCase().includes('lista')
+        ? 'success'
+        : 'info'
 
   return (
     <main>
-      <header className="topbar"><button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Volver a la página principal"><img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja — UNLaR" /></button><div className="session-badge"><span><strong>{actor.name}</strong><small>{actor.role === 'student' ? 'Estudiante' : actor.role === 'photographer' ? 'Fotografía de la clase' : actor.role === 'teacher' ? 'Profesor · permisos de asistencia' : `Institución · ${actor.scope === 'academic' ? 'área académica' : actor.scope === 'library' ? 'Biblioteca' : 'Gimnasio'}`}</small></span>{actor.role !== 'student' && <button type="button" className="secondary-button" onClick={logout}>Cambiar usuario</button>}</div></header>
-      <section className="hero"><div><p className="eyebrow">Billetera universitaria verificable</p><h1>Credenciales que compartís con control.</h1><p className="lead">Antecedentes académicos, servicios institucionales y asistencia en una misma billetera.</p></div><div className="trust-card"><span className="trust-icon">⌁</span><div><strong>Privacidad por diseño</strong><p>Compartí solo el dato que te solicitan.</p></div></div></section>
-      <nav className="tabs" aria-label="Módulos">{allowedTabs.map((tab) => <button className={activeTab === tab.id ? 'tab active' : 'tab'} key={tab.id} onClick={() => setActiveTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <p className="notice" role="status">{working && <span className="inline-spinner" aria-hidden="true" />}{working ? 'Procesando… ' : ''}{notice}</p>
-
-      {activeTab === 'wallet' && <section className="layout wallet-layout">
-        <div><div className="section-heading"><div><p className="eyebrow">Estudiante</p><h2>Mis credenciales</h2></div><span className="count">{credentials.length}</span></div>
-          <div className="student-profile">
-            <p className="eyebrow">Identidad del titular</p>
-            <label>Nombre y apellido<input value={savedStudent?.fullName ?? actor.name} readOnly /></label>
-            <label>Matrícula<input value={savedStudent?.enrollmentNumber ?? 'Cargando…'} readOnly /></label>
-            <button type="button" className="secondary-button" onClick={() => void saveStudentProfile()} disabled={working || !savedStudent || savedStudent.walletLinked}>{!savedStudent ? <><span className="button-spinner" /> Cargando perfil…</> : savedStudent.walletLinked ? 'Billetera vinculada' : 'Vincular esta billetera'}</button>
-            <p className="muted">El nombre y la matrícula se vinculan a esta cuenta. La firma protege estos datos y los asocia a la billetera.</p>
-            <small className="muted">La identidad del titular se incluye en cada credencial emitida.</small>
+      <header className="topbar">
+        <button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Volver a la página principal">
+          <img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja — UNLaR" />
+        </button>
+        <div className="session-badge">
+          <div className="user-avatar" aria-hidden="true">
+            {actor.name.charAt(0).toUpperCase()}
           </div>
-          <div className="wallet-actions"><button type="button" className="primary-button" onClick={() => setScannerOpen(true)}>Escanear QR con la cámara</button><span className="muted">Las credenciales se guardan en este teléfono.</span></div>
-          {credentials.length ? <div className="credential-list">{credentials.map((credential) => <div className="wallet-credential-row" key={credential.id}><button type="button" className={selectedCredentialId === credential.id ? 'credential-card selected' : 'credential-card'} onClick={() => setSelectedCredentialId(credential.id)}><span className="credential-icon">{iconFor(credential.type as CredentialKind)}</span><span className="credential-copy"><small>{credential.type}</small><strong>{credential.claims.titulo}</strong><span>{credential.claims.detalle}</span></span><span className={credential.localStatus === 'Activa' ? 'status good' : 'status bad'}>{credential.localStatus}</span></button>{credential.localStatus !== 'Activa' && <button type="button" className="trash-icon-button" aria-label={`Borrar ${credential.claims.titulo} de la billetera`} title="Borrar de la billetera" onClick={() => void deleteWalletCredential(credential)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" /></svg></button>}</div>)}</div> : <div className="empty-state"><span className="empty-icon">▤</span><h3>Tu billetera está vacía</h3><p>Para agregar una credencial, escaneá con tu cámara el QR de entrega que te comparta el emisor.</p></div>}
+          <div className="user-info">
+            <strong className="user-name">{actor.name}</strong>
+            <span className="user-role-badge">
+              <i className="role-dot" />
+              {actor.role === 'student' ? 'Estudiante' : actor.role === 'photographer' ? 'Fotógrafo/a' : actor.role === 'teacher' ? 'Profesor' : `Institución · ${actor.scope === 'academic' ? 'Académica' : actor.scope === 'library' ? 'Biblioteca' : 'Gimnasio'}`}
+            </span>
+          </div>
+          {actor.role !== 'student' && (
+            <button type="button" className="secondary-button switch-user-button" onClick={logout} title="Cambiar usuario o cerrar sesión">
+              Cambiar
+            </button>
+          )}
         </div>
-        <aside className="detail-panel">{selectedCredential ? <><p className="eyebrow">{selectedCredential.type}</p><h2>{selectedCredential.claims.titulo}</h2><p className="detail-copy">{selectedCredential.claims.detalle}</p><dl><div><dt>Emisor</dt><dd>Universidad Nacional de La Rioja</dd></div><div><dt>Emitida</dt><dd>{formatDate(selectedCredential.issuedAt)}</dd></div><div><dt>Vigencia</dt><dd>{selectedCredential.expiresAt ? formatDate(selectedCredential.expiresAt) : 'Sin vencimiento'}</dd></div><div><dt>Titular firmado</dt><dd>{selectedCredential.claims.nombreEstudiante ?? 'Credencial anterior al perfil actual'}</dd></div>{selectedCredential.claims.matricula && <div><dt>Matrícula</dt><dd>{selectedCredential.claims.matricula}</dd></div>}<div><dt>Firma</dt><dd>{selectedCredential.proof.algorithm} válida</dd></div></dl></> : <><p className="eyebrow">Tu espacio personal</p><h2>Guardá credenciales emitidas por la universidad</h2><p className="detail-copy">Cada QR de entrega es de un solo uso y vence a los diez minutos.</p></>}</aside>
-      </section>}
+      </header>
+
+      <section className="hero">
+        <div>
+          <p className="eyebrow">Billetera universitaria verificable</p>
+          <h1>Credenciales que compartís con control.</h1>
+          <p className="lead">Antecedentes académicos, servicios institucionales y asistencia en una misma billetera criptográfica.</p>
+        </div>
+        <div className="trust-card">
+          <span className="trust-icon" aria-hidden="true">🛡️</span>
+          <div>
+            <strong>Privacidad por diseño</strong>
+            <p>Divulgación selectiva con firmas Ed25519.</p>
+          </div>
+        </div>
+      </section>
+
+      <nav className="tabs" aria-label="Módulos">
+        {allowedTabs.map((tab) => (
+          <button
+            className={activeTab === tab.id ? 'tab active' : 'tab'}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            type="button"
+          >
+            <span className="tab-icon" aria-hidden="true">{tab.icon}</span>
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      <div className={`notice notice-${noticeType}`} role="status">
+        <div className="notice-icon-bubble" aria-hidden="true">
+          {working ? <span className="inline-spinner" /> : noticeType === 'success' ? '✓' : noticeType === 'error' ? '!' : 'ℹ'}
+        </div>
+        <div className="notice-content">
+          <strong>{working ? 'Procesando…' : noticeType === 'success' ? 'Operación exitosa' : noticeType === 'error' ? 'Aviso' : 'Información'}</strong>
+          <p>{notice}</p>
+        </div>
+      </div>
+
+      {activeTab === 'wallet' && (
+        <section className="layout wallet-layout">
+          <div>
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Estudiante</p>
+                <h2>Mis credenciales</h2>
+              </div>
+              <span className="count">{credentials.length}</span>
+            </div>
+
+            <div className="student-profile">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <p className="eyebrow" style={{ margin: 0 }}>Identidad del titular</p>
+                {savedStudent?.walletLinked && (
+                  <span className="live-badge" style={{ padding: '3px 10px', fontSize: '0.72rem' }}>
+                    <i /> Vinculada
+                  </span>
+                )}
+              </div>
+              <div className="student-profile-grid">
+                <label>Nombre y apellido<input value={savedStudent?.fullName ?? actor.name} readOnly /></label>
+                <label>Matrícula<input value={savedStudent?.enrollmentNumber ?? 'Cargando…'} readOnly /></label>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => void saveStudentProfile()}
+                  disabled={working || !savedStudent || savedStudent.walletLinked}
+                >
+                  {!savedStudent ? <><span className="button-spinner" /> Cargando perfil…</> : savedStudent.walletLinked ? '✓ Billetera vinculada' : 'Vincular esta billetera'}
+                </button>
+                <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  La firma criptográfica asocia de forma inmutable la billetera con el perfil estudiantil.
+                </p>
+              </div>
+            </div>
+
+            <div className="wallet-actions">
+              <button type="button" className="primary-button" onClick={() => setScannerOpen(true)}>
+                <span>📷</span> Escanear QR con la cámara
+              </button>
+              <span className="muted">Las credenciales se guardan protegidas en este teléfono.</span>
+            </div>
+
+            {credentials.length ? (
+              <div className="credential-list">
+                {credentials.map((credential) => (
+                  <div className="wallet-credential-row" key={credential.id}>
+                    <button
+                      type="button"
+                      className={`credential-card ${cardThemeClass(credential.type)} ${selectedCredentialId === credential.id ? 'selected' : ''}`}
+                      onClick={() => setSelectedCredentialId(credential.id)}
+                    >
+                      <div className="card-chip-strip">
+                        <div className="card-chip"><div className="chip-line" /></div>
+                        <span className="card-institution">UNLaR · CREDENCIAL DIGITAL</span>
+                        <span className="card-kind-badge">{iconFor(credential.type as CredentialKind)} {credential.type}</span>
+                      </div>
+                      <div className="card-body">
+                        <div className="card-title-group">
+                          <strong className="card-title">{credential.claims.titulo}</strong>
+                          <span className="card-detail">{credential.claims.detalle}</span>
+                        </div>
+                        {credential.claims.nota && (
+                          <div className="card-grade-badge">
+                            <small>CALIFICACIÓN</small>
+                            <strong>{credential.claims.nota} <span className="grade-max">/ 10</span></strong>
+                          </div>
+                        )}
+                      </div>
+                      <div className="card-footer">
+                        <div className="card-holder-info">
+                          <small className="card-holder-label">TITULAR FIRMADO</small>
+                          <span className="card-holder-name">{credential.claims.nombreEstudiante ?? savedStudent?.fullName ?? actor.name}</span>
+                          {credential.claims.matricula && (
+                            <span className="card-holder-matricula">Mat. {credential.claims.matricula}</span>
+                          )}
+                        </div>
+                        <span className={credential.localStatus === 'Activa' ? 'status good' : 'status bad'}>
+                          <i className="status-dot" />
+                          {credential.localStatus}
+                        </span>
+                      </div>
+                    </button>
+                    {credential.localStatus !== 'Activa' && (
+                      <button
+                        type="button"
+                        className="trash-icon-button"
+                        aria-label={`Borrar ${credential.claims.titulo} de la billetera`}
+                        title="Borrar de la billetera"
+                        onClick={() => void deleteWalletCredential(credential)}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <span className="empty-icon">🪪</span>
+                <h3>Tu billetera está vacía</h3>
+                <p>Para agregar una credencial, escaneá con tu cámara el QR de entrega que te comparta el emisor institucional.</p>
+              </div>
+            )}
+          </div>
+
+          <aside className="detail-panel">
+            {selectedCredential ? (
+              <>
+                <div className="security-verified-badge">
+                  <span>🛡️</span> Criptografía Ed25519 verificada
+                </div>
+                <p className="eyebrow">{selectedCredential.type}</p>
+                <h2>{selectedCredential.claims.titulo}</h2>
+                <p className="detail-copy">{selectedCredential.claims.detalle}</p>
+                <dl>
+                  <div><dt>Emisor institucional</dt><dd>Universidad Nacional de La Rioja</dd></div>
+                  <div><dt>Fecha de emisión</dt><dd>{formatDate(selectedCredential.issuedAt)}</dd></div>
+                  <div><dt>Vigencia</dt><dd>{selectedCredential.expiresAt ? formatDate(selectedCredential.expiresAt) : 'Sin vencimiento'}</dd></div>
+                  <div><dt>Titular firmado</dt><dd>{selectedCredential.claims.nombreEstudiante ?? 'Perfil vinculado'}</dd></div>
+                  {selectedCredential.claims.matricula && <div><dt>Matrícula</dt><dd>{selectedCredential.claims.matricula}</dd></div>}
+                  <div><dt>Algoritmo</dt><dd>{selectedCredential.proof.algorithm} (EdDSA)</dd></div>
+                  <div><dt>Estado en registro</dt><dd>{selectedCredential.localStatus}</dd></div>
+                </dl>
+              </>
+            ) : (
+              <>
+                <p className="eyebrow">Tu espacio personal</p>
+                <h2>Guardá credenciales emitidas por la universidad</h2>
+                <p className="detail-copy">Cada QR de entrega es de un solo uso y vence a los diez minutos.</p>
+              </>
+            )}
+          </aside>
+        </section>
+      )}
 
       {activeTab === 'issuer' && <section className="layout issuer-layout"><div className="panel form-panel"><p className="eyebrow">Panel institucional · {actor.scope === 'academic' ? 'Área académica' : actor.scope === 'library' ? 'Biblioteca' : 'Gimnasio'}</p><h2>Emitir una credencial</h2><p className="muted">El servidor firma con Ed25519. Este usuario solo puede emitir dentro de su área; la credencial incluye la identidad del estudiante.</p><div className="form-grid"><label>Estudiante destinatario<select value={recipientStudentId} onChange={(event) => setRecipientStudentId(event.target.value)}>{demoStudents.map((student) => <option value={student.id} key={student.id}>{student.fullName} · {student.enrollmentNumber}</option>)}</select></label><label>Tipo de credencial<select value={credentialKind} onChange={(event) => setCredentialKind(event.target.value as CredentialKind)}>{allowedKinds.map((kind) => <option key={kind}>{kind}</option>)}</select></label>{credentialKind !== 'Alumno regular' && <label>{credentialKind === 'Biblioteca' || credentialKind === 'Gimnasio' ? 'Servicio' : 'Materia'}<input value={credentialKind === 'Biblioteca' || credentialKind === 'Gimnasio' ? (subject === 'Bases de Datos' ? '' : subject) : subject} onChange={(event) => setSubject(event.target.value)} placeholder={credentialKind === 'Biblioteca' ? 'Servicio de biblioteca' : credentialKind === 'Gimnasio' ? 'Servicio de gimnasio' : 'Ej.: Bases de Datos'} /></label>}{credentialKind === 'Nota de materia' && <label>Nota (escala de 1 a 10)<input type="number" inputMode="decimal" min="1" max="10" step="0.01" value={grade} onChange={(event) => setGrade(event.target.value)} placeholder="Ej.: 8.50" required /></label>}<label>Vigencia<select value={validityPreset} onChange={(event) => setValidityPreset(event.target.value)}><option value="never">Sin vencimiento</option><option value="7">1 semana</option><option value="30">1 mes (30 días)</option><option value="90">3 meses (90 días)</option><option value="365">1 año (365 días)</option><option value="custom">Personalizada</option></select></label>{validityPreset === 'custom' && <label>Vigencia en días<input type="number" inputMode="numeric" min="1" max="36500" step="1" value={validityDays} onChange={(event) => setValidityDays(event.target.value)} placeholder="Ej.: 45" /></label>}</div><button type="button" className="primary-button" onClick={() => void issueCredential()} disabled={working || (credentialKind === 'Regularidad' && !subject.trim()) || (credentialKind === 'Nota de materia' && !grade) || (validityPreset === 'custom' && !validityDays)}>{working && <span className="button-spinner" />}{working ? 'Emitiendo…' : 'Emitir y generar QR'}</button></div>
         <aside className="panel request-panel">{qr?.value.includes(':delivery:') ? <><QrDisplay value={qr.value} label={qr.label} /><h3>Entrega de credencial</h3><p>Vence: {formatDate(qr.expiresAt)}</p><button type="button" className="secondary-button" onClick={() => void refreshIssuer(true).catch((error) => setNotice(error instanceof Error ? error.message : 'No se pudieron actualizar las emisiones.'))} disabled={issuerRefreshStatus === 'loading'}>{issuerRefreshStatus === 'loading' ? <><span className="button-spinner" /> Actualizando…</> : issuerRefreshStatus === 'updated' ? 'Actualizado ✓' : 'Actualizar emisiones'}</button></> : <><span className="qr-placeholder">▦</span><h3>Entrega por QR</h3><p>El estudiante escanea el QR con su cámara y recibe la credencial firmada en su billetera local.</p></>}</aside>
