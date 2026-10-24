@@ -50,11 +50,43 @@ const iconFor = (kind: CredentialKind) => ({
   'Souvenir': '✦',
 }[kind] ?? '◇')
 
+const credentialKindSlug = (kind: string) => {
+  switch (kind) {
+    case 'Alumno regular': return 'student-id'
+    case 'Regularidad': return 'regularidad'
+    case 'Materia aprobada': return 'aprobada'
+    case 'Nota de materia': return 'nota'
+    case 'Biblioteca': return 'biblioteca'
+    case 'Gimnasio': return 'gimnasio'
+    case 'Souvenir': return 'souvenir'
+    default: return 'default'
+  }
+}
+
+const credentialCategory = (kind: string): { label: string; group: 'all' | 'identity' | 'academic' | 'service' | 'commemorative' } => {
+  switch (kind) {
+    case 'Alumno regular':
+      return { label: 'Identidad universitaria', group: 'identity' }
+    case 'Regularidad':
+    case 'Materia aprobada':
+    case 'Nota de materia':
+      return { label: 'Acreditación académica', group: 'academic' }
+    case 'Biblioteca':
+    case 'Gimnasio':
+      return { label: 'Servicios de campus', group: 'service' }
+    case 'Souvenir':
+      return { label: 'Recuerdo conmemorativo', group: 'commemorative' }
+    default:
+      return { label: 'Credencial oficial', group: 'academic' }
+  }
+}
+
 const cardThemeClass = (kind: string) => {
   switch (kind) {
     case 'Alumno regular':
+      return 'card-theme-student-id'
     case 'Regularidad':
-      return 'card-theme-regular'
+      return 'card-theme-regularidad'
     case 'Materia aprobada':
       return 'card-theme-aprobada'
     case 'Nota de materia':
@@ -282,6 +314,20 @@ function App() {
   const [sessionChecking, setSessionChecking] = useState(true)
   const [activeTab, setActiveTab] = useState<TabId>('wallet')
   const [credentials, setCredentials] = useState<WalletCredential[]>([])
+  const [walletCategoryFilter, setWalletCategoryFilter] = useState<'all' | 'identity' | 'academic' | 'service' | 'commemorative'>('all')
+
+  const filteredCredentials = useMemo(() => {
+    if (walletCategoryFilter === 'all') return credentials
+    return credentials.filter((cred) => credentialCategory(cred.type).group === walletCategoryFilter)
+  }, [credentials, walletCategoryFilter])
+
+  const categoryCounts = useMemo(() => ({
+    all: credentials.length,
+    identity: credentials.filter((c) => credentialCategory(c.type).group === 'identity').length,
+    academic: credentials.filter((c) => credentialCategory(c.type).group === 'academic').length,
+    service: credentials.filter((c) => credentialCategory(c.type).group === 'service').length,
+    commemorative: credentials.filter((c) => credentialCategory(c.type).group === 'commemorative').length,
+  }), [credentials])
   const [serverCredentials, setServerCredentials] = useState<IssuedCredential[]>([])
   const [issuerRefreshStatus, setIssuerRefreshStatus] = useState<'idle' | 'loading' | 'updated'>('idle')
   const [selectedCredentialId, setSelectedCredentialId] = useState('')
@@ -1110,61 +1156,149 @@ function App() {
             </div>
 
             {credentials.length ? (
-              <div className="credential-list">
-                {credentials.map((credential) => (
-                  <div className="wallet-credential-row" key={credential.id}>
-                    <button
-                      type="button"
-                      className={`credential-card ${cardThemeClass(credential.type)} ${selectedCredentialId === credential.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedCredentialId(credential.id)}
-                    >
-                      <div className="card-chip-strip">
-                        <div className="card-chip"><div className="chip-line" /></div>
-                        <span className="card-institution">UNLaR · CREDENCIAL DIGITAL VERIFICABLE</span>
-                        <span className="card-kind-badge">{iconFor(credential.type as CredentialKind)} {credential.type}</span>
-                      </div>
-                      <div className="card-body">
-                        <div className="card-title-group">
-                          <strong className="card-title">{credential.claims.titulo}</strong>
-                          <span className="card-detail">{credential.claims.detalle}</span>
-                        </div>
-                        {credential.claims.nota && (
-                          <div className="card-grade-badge">
-                            <small>CALIFICACIÓN</small>
-                            <strong>{credential.claims.nota} <span className="grade-max">/ 10</span></strong>
-                          </div>
-                        )}
-                      </div>
-                      <div className="card-footer">
-                        <div className="card-holder-info">
-                          <small className="card-holder-label">TITULAR ACREDITADO</small>
-                          <span className="card-holder-name">{credential.claims.nombreEstudiante ?? savedStudent?.fullName ?? actor.name}</span>
-                          {credential.claims.matricula && (
-                            <span className="card-holder-matricula">Mat. {credential.claims.matricula}</span>
-                          )}
-                        </div>
-                        <span className={credential.localStatus === 'Activa' ? 'status good' : 'status bad'}>
-                          <i className="status-dot" />
-                          {credential.localStatus}
-                        </span>
-                      </div>
-                    </button>
-                    {credential.localStatus !== 'Activa' && (
+              <>
+                {credentials.length > 1 && (
+                  <div className="wallet-filter-bar">
+                    <span className="wallet-filter-label">Agrupar por tipo:</span>
+                    <div className="wallet-filter-pills" role="tablist" aria-label="Filtrar por categoría">
                       <button
                         type="button"
-                        className="trash-icon-button"
-                        aria-label={`Eliminar «${credential.claims.titulo}» de esta billetera`}
-                        title="Eliminar de esta billetera"
-                        onClick={() => void deleteWalletCredential(credential)}
+                        role="tab"
+                        aria-selected={walletCategoryFilter === 'all'}
+                        className={`wallet-filter-pill ${walletCategoryFilter === 'all' ? 'active' : ''}`}
+                        onClick={() => setWalletCategoryFilter('all')}
                       >
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" />
-                        </svg>
+                        Todas <span className="filter-count">{categoryCounts.all}</span>
                       </button>
-                    )}
+                      {categoryCounts.identity > 0 && (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={walletCategoryFilter === 'identity'}
+                          className={`wallet-filter-pill filter-identity ${walletCategoryFilter === 'identity' ? 'active' : ''}`}
+                          onClick={() => setWalletCategoryFilter('identity')}
+                        >
+                          🎓 Identidad <span className="filter-count">{categoryCounts.identity}</span>
+                        </button>
+                      )}
+                      {categoryCounts.academic > 0 && (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={walletCategoryFilter === 'academic'}
+                          className={`wallet-filter-pill filter-academic ${walletCategoryFilter === 'academic' ? 'active' : ''}`}
+                          onClick={() => setWalletCategoryFilter('academic')}
+                        >
+                          📚 Académicas <span className="filter-count">{categoryCounts.academic}</span>
+                        </button>
+                      )}
+                      {categoryCounts.service > 0 && (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={walletCategoryFilter === 'service'}
+                          className={`wallet-filter-pill filter-service ${walletCategoryFilter === 'service' ? 'active' : ''}`}
+                          onClick={() => setWalletCategoryFilter('service')}
+                        >
+                          ⚡ Servicios <span className="filter-count">{categoryCounts.service}</span>
+                        </button>
+                      )}
+                      {categoryCounts.commemorative > 0 && (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={walletCategoryFilter === 'commemorative'}
+                          className={`wallet-filter-pill filter-commemorative ${walletCategoryFilter === 'commemorative' ? 'active' : ''}`}
+                          onClick={() => setWalletCategoryFilter('commemorative')}
+                        >
+                          ✦ Conmemorativas <span className="filter-count">{categoryCounts.commemorative}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                ))}
-              </div>
+                )}
+
+                <div className="credential-list">
+                  {filteredCredentials.map((credential) => (
+                    <div className="wallet-credential-row" key={credential.id}>
+                      <button
+                        type="button"
+                        className={`credential-card ${cardThemeClass(credential.type)} kind-${credentialKindSlug(credential.type)} ${selectedCredentialId === credential.id ? 'selected' : ''}`}
+                        onClick={() => setSelectedCredentialId(credential.id)}
+                      >
+                        <div className="card-chip-strip">
+                          <div className={`card-chip chip-${credentialKindSlug(credential.type)}`}>
+                            <div className="chip-line" />
+                          </div>
+                          <span className="card-institution">UNLaR · {credentialCategory(credential.type).label.toUpperCase()}</span>
+                          <span className={`card-kind-badge badge-${credentialKindSlug(credential.type)}`}>
+                            {iconFor(credential.type as CredentialKind)} {credential.type}
+                          </span>
+                        </div>
+                        <div className="card-body">
+                          <div className="card-title-group">
+                            <span className="card-category-tag">{credentialCategory(credential.type).label}</span>
+                            <strong className="card-title">{credential.claims.titulo}</strong>
+                            <span className="card-detail">{credential.claims.detalle}</span>
+                          </div>
+                          {credential.claims.nota && (
+                            <div className="card-grade-badge">
+                              <small>CALIFICACIÓN</small>
+                              <strong>{credential.claims.nota} <span className="grade-max">/ 10</span></strong>
+                            </div>
+                          )}
+                        </div>
+                        <div className="card-footer">
+                          <div className="card-holder-info">
+                            <small className="card-holder-label">TITULAR ACREDITADO</small>
+                            <span className="card-holder-name">{credential.claims.nombreEstudiante ?? savedStudent?.fullName ?? actor.name}</span>
+                            {credential.claims.matricula && (
+                              <span className="card-holder-matricula">Mat. {credential.claims.matricula}</span>
+                            )}
+                          </div>
+                          <div className="card-footer-right">
+                            {credential.type === 'Biblioteca' && (
+                              <span className="card-sub-tag">PRÉSTAMOS HABILITADOS</span>
+                            )}
+                            {credential.type === 'Gimnasio' && (
+                              <span className="card-sub-tag">PASE LIBRE</span>
+                            )}
+                            {credential.type === 'Souvenir' && (
+                              <span className="card-sub-tag">EDICIÓN 2026</span>
+                            )}
+                            {credential.type === 'Alumno regular' && (
+                              <span className="card-sub-tag">IDENTIDAD</span>
+                            )}
+                            {credential.type === 'Materia aprobada' && (
+                              <span className="card-sub-tag">ACREDITADA</span>
+                            )}
+                            {credential.type === 'Regularidad' && (
+                              <span className="card-sub-tag">REGULAR</span>
+                            )}
+                            <span className={credential.localStatus === 'Activa' ? 'status good' : 'status bad'}>
+                              <i className="status-dot" />
+                              {credential.localStatus}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                      {credential.localStatus !== 'Activa' && (
+                        <button
+                          type="button"
+                          className="trash-icon-button"
+                          aria-label={`Eliminar «${credential.claims.titulo}» de esta billetera`}
+                          title="Eliminar de esta billetera"
+                          onClick={() => void deleteWalletCredential(credential)}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="empty-state">
                 <span className="empty-icon">🪪</span>
@@ -1329,38 +1463,56 @@ function App() {
               </button>
             </div>
             {serverCredentials.length ? (
-              <div className="credential-list">
+              <div className="issued-credentials-list">
                 {serverCredentials.map((credential) => (
-                  <div className="credential-card record-card" key={credential.id}>
-                    <span className="credential-icon">{iconFor(credential.kind)}</span>
-                    <span className="credential-copy">
-                      <small>{credential.kind}</small>
-                      <strong>{credential.title}</strong>
-                      <span>{credential.detail}</span>
-                      {credential.studentName && <small>Titular: {credential.studentName} · Matrícula: {credential.enrollmentNumber}</small>}
-                    </span>
-                    <span className={credential.status === 'Activa' ? 'status good' : 'status bad'}>{credential.status}</span>
-                    {credential.status === 'Activa' && (
-                      <button type="button" className="danger-link" onClick={() => void revokeCredential(credential)}>
-                        Revocar
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="trash-icon-button"
-                      aria-label={`Eliminar la credencial «${credential.title}» del registro`}
-                      title="Eliminar credencial"
-                      disabled={credentialDeletingId === credential.id}
-                      onClick={() => void deleteIssuedCredential(credential)}
-                    >
-                      {credentialDeletingId === credential.id ? (
-                        <span className="button-spinner" />
-                      ) : (
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" />
-                        </svg>
+                  <div className={`record-card record-card-${credentialKindSlug(credential.kind)}`} key={credential.id}>
+                    <div className="record-main-info">
+                      <div className={`record-icon-wrapper record-icon-${credentialKindSlug(credential.kind)}`}>
+                        <span className="record-icon" aria-hidden="true">{iconFor(credential.kind)}</span>
+                      </div>
+                      <div className="record-copy">
+                        <div className="record-tags-row">
+                          <span className={`record-kind-badge badge-${credentialKindSlug(credential.kind)}`}>
+                            {credential.kind}
+                          </span>
+                          {credential.studentName && (
+                            <span className="record-student-pill">
+                              <span className="record-student-label">Titular:</span> {credential.studentName}
+                              {credential.enrollmentNumber ? <span className="record-enrollment"> · Mat. {credential.enrollmentNumber}</span> : ''}
+                            </span>
+                          )}
+                        </div>
+                        <strong className="record-title">{credential.title}</strong>
+                        <span className="record-detail">{credential.detail}</span>
+                      </div>
+                    </div>
+                    <div className="record-actions">
+                      <span className={credential.status === 'Activa' ? 'status good' : 'status bad'}>
+                        <i className="status-dot" />
+                        {credential.status}
+                      </span>
+                      {credential.status === 'Activa' && (
+                        <button type="button" className="record-revoke-btn" onClick={() => void revokeCredential(credential)}>
+                          Revocar
+                        </button>
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        className="trash-icon-button"
+                        aria-label={`Eliminar la credencial «${credential.title}» del registro`}
+                        title="Eliminar credencial"
+                        disabled={credentialDeletingId === credential.id}
+                        onClick={() => void deleteIssuedCredential(credential)}
+                      >
+                        {credentialDeletingId === credential.id ? (
+                          <span className="button-spinner" />
+                        ) : (
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
