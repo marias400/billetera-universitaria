@@ -89,10 +89,12 @@ try {
   assert.equal(inspect.prepare(`select count(*) as n from ${table}`).get().n,0,table);checks++
  }
  assert.equal(inspect.prepare('select count(*) as n from students where wallet_public_key is not null').get().n,0);checks++
- assert.equal(inspect.prepare('select count(*) as n from students').get().n,cloud?0:2);checks++
+ assert.equal(inspect.prepare('select count(*) as n from students').get().n,2);checks++
  const emptyRoster=await call('/api/attendance/roster',teacher)
- assert.deepEqual(emptyRoster.dates,[]);checks++
- if(cloud){assert.deepEqual(emptyRoster.students,[]);checks++}
+ assert.deepEqual(emptyRoster.dates.map(d=>d.key),['2026-10-13','2026-10-20']);checks++
+ assert.equal(emptyRoster.students.length,2);checks++
+ assert.equal(emptyRoster.students.find(s=>s.id==='mariano-arias-simone').attendance['2026-10-13'],'P');checks++
+ assert.equal(emptyRoster.students.find(s=>s.id==='peralta-herrar-nahuel').attendance['2026-10-20'],'P');checks++
  inspect.close()
  await call('/api/demo/me',token,undefined,401)
  await call('/api/guests/restore',null,proof('guest-restore'),404)

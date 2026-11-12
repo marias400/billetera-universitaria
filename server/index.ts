@@ -99,7 +99,7 @@ const attendanceColumns = db.prepare('pragma table_info(attendance_records)').al
 if (!attendanceColumns.some((column) => column.name === 'student_id')) db.exec('alter table attendance_records add column student_id text')
 if (!attendanceColumns.some((column) => column.name === 'student_name')) db.exec('alter table attendance_records add column student_name text')
 
-for (const student of cloudMode ? [] : demoStudents) {
+for (const student of demoStudents) {
   db.prepare('insert or ignore into students (id, full_name, enrollment_number, identity_locked, created_at) values (?, ?, ?, 1, ?)').run(student.id, student.fullName, student.enrollmentNumber, new Date().toISOString())
   db.prepare('update students set full_name = ?, enrollment_number = ?, identity_locked = 1 where id = ?').run(student.fullName, student.enrollmentNumber, student.id)
 }
@@ -175,7 +175,9 @@ function csvCell(value: string) {
 
 function getAttendanceRoster() {
   const sessions = db.prepare('select created_at as createdAt, expires_at as expiresAt from attendance_sessions').all() as { createdAt: string | null; expiresAt: string }[]
-  const dateKeys = [...new Set(sessions.map((session) => dateKey(session.createdAt ?? session.expiresAt)))].sort()
+  const fixedDates = ['2026-10-13', '2026-10-20']
+  const fixedAttendance = new Map([['2026-10-13', 'mariano-arias-simone'], ['2026-10-20', 'peralta-herrar-nahuel']])
+  const dateKeys = [...new Set([...sessions.map((session) => dateKey(session.createdAt ?? session.expiresAt)), ...fixedDates])].sort()
   const students = db.prepare('select id, full_name as fullName from students order by id').all() as { id: string; fullName: string }[]
   const records = db.prepare('select student_id as studentId, recorded_at as recordedAt from attendance_records where student_id is not null').all() as { studentId: string; recordedAt: string }[]
   const present = new Set(records.map((record) => `${record.studentId}|${dateKey(record.recordedAt)}`))
@@ -186,7 +188,8 @@ function getAttendanceRoster() {
     students: students.map((student) => ({
       ...student,
       attendance: Object.fromEntries(dateKeys.map((key) => {
-        const isPresent = present.has(`${student.id}|${key}`)
+        const fixedStudent = fixedAttendance.get(key)
+        const isPresent = fixedStudent ? student.id === fixedStudent : present.has(`${student.id}|${key}`)
         return [key, isPresent ? 'P' : 'A']
       })),
     })),
@@ -545,13 +548,12 @@ app.get('/api/attendance/export.csv', async (request, reply) => {
 app.post('/api/demo/reset', async (request, reply) => {
   if (!requireRole(request, reply, ['teacher'])) return
   if (!cloudMode && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip)) return reply.code(403).send({ message: 'El reinicio solo está disponible desde localhost en la Mac.' })
-  const keep = cloudMode ? [] : ['mariano-arias-simone', 'peralta-herrar-nahuel']
+  const keep = ['mariano-arias-simone', 'peralta-herrar-nahuel']
   db.transaction(() => {
     for (const table of ['raffle_prize_requests', 'credential_deliveries', 'reward_claims', 'reward_sessions', 'presentation_requests', 'attendance_records', 'attendance_sessions', 'credentials']) db.prepare(`delete from ${table}`).run()
     db.prepare('delete from wallet_bindings').run()
     db.prepare('update students set wallet_public_key = null').run()
-    if (cloudMode) db.prepare('delete from students').run()
-    else db.prepare('delete from students where id not in (?, ?)').run(...keep)
+    db.prepare('delete from students where id not in (?, ?)').run(...keep)
   })()
   for (const [token, actor] of activeSessions) if (actor.role === 'student' || actor.role === 'photographer') activeSessions.delete(token)
   if (existsSync(classPhotoPath)) unlinkSync(classPhotoPath)
