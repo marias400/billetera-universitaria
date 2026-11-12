@@ -6,7 +6,7 @@ Prototipo para Seminario de Actualización II. Reúne credenciales académicas, 
 
 El prototipo ya implementa una demo de flujo entre dispositivos:
 
-- El emisor crea credenciales ficticias y el servidor las firma con Ed25519.
+- El emisor crea credenciales ficticias y el servidor las firma con ML-DSA-65.
 - La clave privada del emisor se genera en el primer inicio y se guarda en `data/`, excluida de Git.
 - El emisor genera un QR de entrega, de un solo uso y con vencimiento a los diez minutos.
 - La billetera escanea el QR, valida la firma y guarda la credencial y su clave de dispositivo en IndexedDB.
@@ -99,3 +99,28 @@ Mientras se completa la instalación global, el proyecto incluye un runtime loca
     PATH="../.tools/node/bin:$PATH" ../.tools/node/bin/npm run dev
 
 La API queda disponible en el puerto 4001. No subas `data/`: ahí se almacenan SQLite y la clave privada local del emisor.
+
+
+## Despliegue en Railway
+
+El Dockerfile compila React y sirve la interfaz y la API desde un único servicio Node 24. Railway termina HTTPS. La demo local conserva su lanzador HTTPS.
+
+- Rama de despliegue: `feature/railway-deploy`.
+- Variables: `APP_MODE=cloud`, `HOST=0.0.0.0`, `DATA_DIR=/data`, `PORT=8080`.
+- Montar un volumen persistente en `/data`. Allí quedan SQLite, la clave privada ML-DSA-65, el CSV y la foto. Una sola réplica para SQLite.
+- `ACCESS_PASSWORD_HASHES`: JSON con las cuentas `teacher-marcelo`, `admin-academic`, `admin-library`, `admin-gym` y `demo-tools`. Cada valor tiene formato `salt:hash`, con salt hexadecimal de 16 bytes y hash scrypt de 32 bytes. Se comprueba la contraseña en el servidor. El servicio se niega a arrancar sin estos valores.
+- Entrada pública: `/?registro=1`, sin contraseña. Portal institucional/docente: `/?acceso=institucional`.
+- Las credenciales de acceso generadas se guardan solo en `data/railway-access.md`, excluido de Git. Las contraseñas no se incluyen en la interfaz ni en el código publicado.
+- Las sesiones duran ocho horas y se invalidan al cerrar sesión o reiniciar el servidor. Las billeteras pueden recuperar su acceso mediante su clave local.
+- Diez intentos fallidos de acceso por IP bloquean el ingreso por quince minutos.
+- En cloud, el nombre declarado no habilita fotografía ni suplanta perfiles predefinidos. La cuenta docente puede subir la foto de la clase. El registro de participantes sigue siendo una demo con nombres declarados, no autenticación oficial universitaria.
+
+### Reiniciar desde asistencia
+
+El docente autenticado puede usar el botón de reinicio también en Railway. Elimina credenciales, solicitudes y entregas, asistencias, sorteos, souvenirs, la foto grupal y las vinculaciones de billeteras. Borra los participantes invitados y conserva los dos perfiles de laboratorio sin claves vinculadas. Regenera el CSV y cierra las sesiones de los participantes. Conserva las cuentas de acceso, la sesión docente y la clave institucional.
+
+Los datos de IndexedDB de cada teléfono no pueden borrarse a distancia. Después del reinicio, al recargar la billetera, la aplicación detecta que el registro ya no existe y permite registrarse nuevamente. La clave local puede reutilizarse.
+
+### Validación
+
+`npm test` prueba los flujos locales; `npm run test:cloud` prueba el mismo recorrido con acceso protegido y reinicio completo; `npm run test:access` comprueba hashes, expiración y cierre de sesiones.

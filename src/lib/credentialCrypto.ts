@@ -1,3 +1,4 @@
+import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js'
 import { getWalletKeyPair, storeWalletKeyPair } from './walletStore'
 
 export type CredentialPayload = {
@@ -11,7 +12,7 @@ export type CredentialPayload = {
 }
 
 export type SignedCredential = CredentialPayload & {
-  proof: { algorithm: 'Ed25519'; verificationMethod: string; signature: string }
+  proof: { algorithm: 'ML-DSA-65'; verificationMethod: string; signature: string }
 }
 
 const encoder = new TextEncoder()
@@ -33,28 +34,25 @@ function canonicalize(value: CredentialPayload) {
 
 export async function verifyCredential(credential: SignedCredential, publicKeyPem: string) {
   try {
-    if (credential.proof.algorithm !== 'Ed25519') return false
-    const body = publicKeyPem.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s/g, '')
-    const binary = Uint8Array.from(atob(body), (character) => character.charCodeAt(0))
-    const publicKey = await crypto.subtle.importKey('spki', binary, { name: 'Ed25519' }, false, ['verify'])
+    if (credential.proof.algorithm !== 'ML-DSA-65') return false
+    const publicKey = Uint8Array.from(atob(publicKeyPem), (character) => character.charCodeAt(0))
     const { proof, ...payload } = credential
-    return crypto.subtle.verify({ name: 'Ed25519' }, publicKey, base64UrlToBytes(proof.signature), encoder.encode(canonicalize(payload)))
+    return ml_dsa65.verify(base64UrlToBytes(proof.signature), encoder.encode(canonicalize(payload)), publicKey)
   } catch { return false }
 }
 
 async function getWalletKeys() {
   const existing = await getWalletKeyPair()
   if (existing) return existing
-  const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify'])
+  const pair = ml_dsa65.keygen()
   await storeWalletKeyPair(pair)
   return pair
 }
 
 export async function signWalletProof(message: string) {
   const keys = await getWalletKeys()
-  const signature = await crypto.subtle.sign({ name: 'Ed25519' }, keys.privateKey, encoder.encode(message))
-  const publicKey = await crypto.subtle.exportKey('spki', keys.publicKey)
-  return { walletPublicKey: bytesToBase64(new Uint8Array(publicKey)), holderSignature: bytesToBase64Url(new Uint8Array(signature)) }
+  const signature = ml_dsa65.sign(encoder.encode(message), keys.secretKey)
+  return { walletPublicKey: bytesToBase64(keys.publicKey), holderSignature: bytesToBase64Url(signature) }
 }
 
 function bytesToBase64Url(bytes: Uint8Array) {

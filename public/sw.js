@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unlar-wallet-shell-v2'
+const CACHE_NAME = 'unlar-wallet-shell-cloud-v4'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(['/', '/manifest.webmanifest', '/app-icon.svg', '/unlar-logo.png'])))

@@ -1,7 +1,10 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
+import fastifyStatic from '@fastify/static'
+import { SessionStore, verifyPassword } from './access.ts'
 import Database from 'better-sqlite3'
-import { createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, randomUUID, sign, verify } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
+import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js'
 import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,9 +12,10 @@ import { networkInterfaces } from 'node:os'
 import { execFileSync } from 'node:child_process'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const dataDir = join(root, 'data')
+const cloudMode = process.env.APP_MODE === 'cloud'
+const dataDir = process.env.DATA_DIR || join(root, 'data')
 const databasePath = join(dataDir, 'billetera.sqlite')
-const privateKeyPath = join(dataDir, 'issuer-ed25519-private.pem')
+const privateKeyPath = join(dataDir, 'issuer-ml-dsa-65.json')
 const attendanceFilePath = join(dataDir, 'planilla-asistencia.csv')
 const classPhotoPath = join(dataDir, 'foto-clase.jpg')
 const teacherName = 'Marcelo Roldan'
@@ -20,9 +24,11 @@ const demoStudents = [
   { id: 'mariano-arias-simone', fullName: 'Mariano Arias Simone', enrollmentNumber: 'DEMO-ISI-001' },
   { id: 'peralta-herrar-nahuel', fullName: 'Peralta Herrera Nahuel', enrollmentNumber: 'DEMO-ISI-002' },
 ]
-type DemoRole = 'student' | 'teacher' | 'institutional' | 'photographer'
+type DemoRole = 'student' | 'teacher' | 'institutional' | 'photographer' | 'demo-tools'
 type DemoActor = { id: string; role: DemoRole; name: string; scope?: 'academic' | 'library' | 'gym'; studentId?: string }
+const hasPhotographerAccess = (actor: DemoActor) => actor.role === 'teacher' || (!cloudMode && (actor.role === 'photographer' || actor.studentId === 'mariano-arias-simone'))
 const isPhotographerName = (name: string) => {
+  if (cloudMode) return false
   const normalizedName = name.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   return normalizedName === 'fotografo' || normalizedName === 'fotografa'
 }
@@ -33,8 +39,19 @@ const demoAccounts: Record<string, { password: string; actor: DemoActor }> = {
   'admin-academic': { password: 'demo2026', actor: { id: 'admin-academic', role: 'institutional', name: 'Administración académica', scope: 'academic' } },
   'admin-library': { password: 'demo2026', actor: { id: 'admin-library', role: 'institutional', name: 'Administración de Biblioteca', scope: 'library' } },
   'admin-gym': { password: 'demo2026', actor: { id: 'admin-gym', role: 'institutional', name: 'Administración de Gimnasio', scope: 'gym' } },
+  'demo-tools': { password: 'demo2026', actor: { id: 'demo-tools', role: 'demo-tools', name: 'Herramientas Demo' } },
 }
-const activeSessions = new Map<string, DemoActor>()
+const passwordHashes: Record<string, string> = JSON.parse(process.env.ACCESS_PASSWORD_HASHES ?? '{}')
+if (cloudMode && ['teacher-marcelo', 'admin-academic', 'admin-library', 'admin-gym', 'demo-tools'].some((id) => !/^[a-f0-9]{32}:[a-f0-9]{64}$/.test(passwordHashes[id] ?? ''))) {
+  throw new Error('En modo cloud configurá ACCESS_PASSWORD_HASHES para todas las cuentas institucionales y docentes.')
+}
+const activeSessions = new SessionStore<DemoActor>()
+const loginAttempts = new Map<string, { count: number; until: number }>()
+const cleanupTimer = setInterval(() => {
+  activeSessions.cleanup()
+  for (const [ip, attempt] of loginAttempts) if (attempt.until <= Date.now()) loginAttempts.delete(ip)
+}, 60_000)
+cleanupTimer.unref()
 mkdirSync(dataDir, { recursive: true })
 
 const db = new Database(databasePath)
@@ -49,6 +66,7 @@ db.exec([
   'create table if not exists reward_claims (code text not null references reward_sessions(code), student_id text not null references students(id), credential_id text not null references credentials(id), primary key(code, student_id));',
   'create table if not exists presentation_requests (code text primary key, kind text not null, subject text, minimum_grade real, request_note text, expires_at text not null, status text not null default "Abierta", result_json text);',
   'create table if not exists wallet_bindings (holder text primary key, public_key text not null, created_at text not null);',
+  'create table if not exists raffle_prize_requests (id text primary key, student_id text not null references students(id), student_name text not null, place integer not null, email text, created_at text not null, answered_at text, unique(student_id, created_at));',
 ].join('\n'))
 
 const studentColumns = db.prepare('pragma table_info(students)').all() as { name: string }[]
@@ -74,6 +92,9 @@ if (!presentationRequestColumns.some((column) => column.name === 'minimum_grade'
 if (!presentationRequestColumns.some((column) => column.name === 'request_note')) db.exec('alter table presentation_requests add column request_note text')
 if (!presentationRequestColumns.some((column) => column.name === 'required_claims')) db.exec("alter table presentation_requests add column required_claims text not null default '[]'")
 if (!presentationRequestColumns.some((column) => column.name === 'include_exact_grade')) db.exec('alter table presentation_requests add column include_exact_grade integer not null default 0')
+const prizeRequestColumns = db.prepare('pragma table_info(raffle_prize_requests)').all() as { name: string }[]
+if (!prizeRequestColumns.some((column) => column.name === 'raffle_id')) db.exec('alter table raffle_prize_requests add column raffle_id text')
+if (!prizeRequestColumns.some((column) => column.name === 'retired_at')) db.exec('alter table raffle_prize_requests add column retired_at text')
 const attendanceColumns = db.prepare('pragma table_info(attendance_records)').all() as { name: string }[]
 if (!attendanceColumns.some((column) => column.name === 'student_id')) db.exec('alter table attendance_records add column student_id text')
 if (!attendanceColumns.some((column) => column.name === 'student_name')) db.exec('alter table attendance_records add column student_name text')
@@ -91,14 +112,17 @@ if (legacyWalletBinding) {
 }
 
 if (!fileExists(privateKeyPath)) {
-  const pair = generateKeyPairSync('ed25519')
-  writeFileSync(privateKeyPath, pair.privateKey.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 })
-  writeFileSync(join(dataDir, 'issuer-ed25519-public.pem'), pair.publicKey.export({ type: 'spki', format: 'pem' }))
+  const pair = ml_dsa65.keygen()
+  writeFileSync(privateKeyPath, JSON.stringify({ publicKey: Buffer.from(pair.publicKey).toString('base64'), secretKey: Buffer.from(pair.secretKey).toString('base64') }), { mode: 0o600, flag: 'wx' })
 }
-const issuerPrivateKey = createPrivateKey(readFileSync(privateKeyPath))
-const issuerPublicKey = createPublicKey(issuerPrivateKey)
-const issuerPublicPem = issuerPublicKey.export({ type: 'spki', format: 'pem' }).toString()
-const issuerId = 'did:web:unlar.edu.ar:prototipo#issuer-ed25519-1'
+const issuerKeys = JSON.parse(readFileSync(privateKeyPath, 'utf8')) as { publicKey: string; secretKey: string }
+const issuerPublicKey = Buffer.from(issuerKeys.publicKey, 'base64')
+const issuerPrivateKey = Buffer.from(issuerKeys.secretKey, 'base64')
+const issuerId = 'did:web:unlar.edu.ar:prototipo#issuer-ml-dsa-65-1'
+
+function verifyWallet(message: string, publicKey: string, signature: string) {
+  return ml_dsa65.verify(Buffer.from(signature, 'base64url'), Buffer.from(message), Buffer.from(publicKey, 'base64'))
+}
 
 function fileExists(path: string) {
   try { readFileSync(path); return true } catch { return false }
@@ -113,7 +137,7 @@ type CredentialPayload = {
   issuedAt: string
   expiresAt?: string
 }
-type SignedCredential = CredentialPayload & { proof: { algorithm: 'Ed25519'; verificationMethod: string; signature: string } }
+type SignedCredential = CredentialPayload & { proof: { algorithm: 'ML-DSA-65'; verificationMethod: string; signature: string } }
 type AttendanceSessionRow = { id: string; subject: string; section: string; expiresAt: string; status: string }
 
 function canonicalize(value: CredentialPayload) {
@@ -121,14 +145,14 @@ function canonicalize(value: CredentialPayload) {
 }
 
 function signCredential(payload: CredentialPayload): SignedCredential {
-  const signature = sign(null, Buffer.from(canonicalize(payload)), issuerPrivateKey).toString('base64url')
-  return { ...payload, proof: { algorithm: 'Ed25519', verificationMethod: issuerId, signature } }
+  const signature = Buffer.from(ml_dsa65.sign(Buffer.from(canonicalize(payload)), issuerPrivateKey)).toString('base64url')
+  return { ...payload, proof: { algorithm: 'ML-DSA-65', verificationMethod: issuerId, signature } }
 }
 
 function verifyCredential(credential: SignedCredential) {
-  if (!credential?.proof || credential.proof.algorithm !== 'Ed25519' || credential.proof.verificationMethod !== issuerId) return false
+  if (!credential?.proof || credential.proof.algorithm !== 'ML-DSA-65' || credential.proof.verificationMethod !== issuerId) return false
   const { proof, ...payload } = credential
-  try { return verify(null, Buffer.from(canonicalize(payload)), issuerPublicKey, Buffer.from(proof.signature, 'base64url')) } catch { return false }
+  try { return ml_dsa65.verify(Buffer.from(proof.signature, 'base64url'), Buffer.from(canonicalize(payload)), issuerPublicKey) } catch { return false }
 }
 
 function newCode() { return randomBytes(18).toString('base64url') }
@@ -190,7 +214,7 @@ function regenerateAttendanceFile() {
 
 regenerateAttendanceFile()
 
-const app = Fastify({ logger: { level: 'warn', base: { service: 'api' } }, disableRequestLogging: true, bodyLimit: 5 * 1024 * 1024, trustProxy: true })
+const app = Fastify({ logger: { level: 'warn', base: { service: 'api' } }, disableRequestLogging: true, bodyLimit: 5 * 1024 * 1024, trustProxy: cloudMode ? 1 : true })
 app.addHook('onResponse', (request, reply, done) => {
   const address = (request.ip || request.socket.remoteAddress || 'desconocida').replace(/^::ffff:/, '')
   if (['127.0.0.1', '::1'].includes(address)) { done(); return }
@@ -205,9 +229,15 @@ app.addHook('onResponse', (request, reply, done) => {
   }
   done()
 })
-await app.register(cors, { origin: true })
+if (!cloudMode) await app.register(cors, { origin: true })
+app.addHook('onSend', async (request, reply, payload) => {
+  reply.header('X-Content-Type-Options', 'nosniff').header('Referrer-Policy', 'same-origin')
+  if (request.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store')
+  return payload
+})
 app.get('/health', async () => ({ ok: true, service: 'billetera-universitaria-api' }))
 app.get('/api/network-info', async () => {
+  if (cloudMode) return { ssid: '', addresses: [] }
   let ssid = ''
   let wifiDevice = ''
   if (process.platform === 'darwin') {
@@ -264,27 +294,65 @@ app.post<{ Body: { fullName?: string; walletPublicKey?: string; holderSignature?
   if (!fullName || fullName.length < 2 || fullName.length > 100) return reply.code(400).send({ message: 'Ingresá tu nombre y apellido (2 a 100 caracteres).' })
   if (!walletPublicKey || !holderSignature) return reply.code(400).send({ message: 'No se pudo crear la billetera en este teléfono.' })
   try {
-    const key = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
-    if (!verify(null, Buffer.from(`guest-register.${fullName}`), key, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'La prueba de la billetera no es válida.' })
+    if (!verifyWallet(`guest-register.${fullName}`, walletPublicKey, holderSignature)) return reply.code(422).send({ message: 'La prueba de la billetera no es válida.' })
   } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
+  const normalizedName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es')
+  const demoStudent = demoStudents.find((student) => normalizedName(student.fullName) === normalizedName(fullName))
+  if (demoStudent && !cloudMode) {
+    const isMariano = normalizedName(demoStudent.fullName) === normalizedName('Mariano Arias Simone')
+    db.prepare('insert or ignore into students (id, full_name, enrollment_number, identity_locked, created_at) values (?, ?, ?, 1, ?)').run(demoStudent.id, demoStudent.fullName, demoStudent.enrollmentNumber, new Date().toISOString())
+    const savedStudent = db.prepare('select wallet_public_key as walletPublicKey from students where id = ?').get(demoStudent.id) as { walletPublicKey: string | null } | undefined
+    if (!savedStudent) return reply.code(500).send({ message: 'No se pudo preparar el perfil de asistencia.' })
+    if (!isMariano && savedStudent.walletPublicKey && savedStudent.walletPublicKey !== walletPublicKey) return reply.code(409).send({ message: 'Este perfil de demo ya está vinculado a otra billetera. Usá el teléfono donde se vinculó por primera vez.' })
+    try {
+      if (isMariano && savedStudent.walletPublicKey !== walletPublicKey) {
+        db.prepare('delete from wallet_bindings where holder = ?').run(`did:unlar:student:${demoStudent.id}`)
+        db.prepare('update students set wallet_public_key = ? where id = ?').run(walletPublicKey, demoStudent.id)
+      } else {
+        db.prepare('update students set wallet_public_key = ? where id = ? and (wallet_public_key is null or wallet_public_key = ?)').run(walletPublicKey, demoStudent.id, walletPublicKey)
+      }
+      const holder = `did:unlar:student:${demoStudent.id}`
+      const existingBinding = db.prepare('select public_key from wallet_bindings where holder = ?').get(holder) as { public_key: string } | undefined
+      if (existingBinding && existingBinding.public_key !== walletPublicKey) return reply.code(409).send({ message: 'Este perfil de demo ya está vinculado a otra billetera.' })
+      db.prepare('insert or ignore into wallet_bindings (holder, public_key, created_at) values (?, ?, ?)').run(holder, walletPublicKey, new Date().toISOString())
+    } catch { return reply.code(409).send({ message: 'Esta billetera ya está vinculada a otro perfil.' }) }
+    regenerateAttendanceFile()
+    const actor: DemoActor = { id: demoStudent.id, role: 'student', name: demoStudent.fullName, studentId: demoStudent.id }
+    const token = randomBytes(32).toString('base64url')
+    activeSessions.set(token, actor)
+    return reply.code(200).send({ token, actor, enrollmentNumber: demoStudent.enrollmentNumber, demoProfile: true })
+  }
   const id = `guest-${randomUUID()}`
   const enrollmentNumber = `INV-${randomBytes(4).toString('hex').toUpperCase()}`
+  const existingWalletStudent = db.prepare('select full_name as fullName from students where wallet_public_key = ?').get(walletPublicKey) as { fullName: string } | undefined
+  if (existingWalletStudent) {
+    return reply.code(409).send({ message: `Esta billetera ya está asociada a un registro (${existingWalletStudent.fullName}). Para registrar a otra persona, abrí la demo en otro dispositivo o perfil de navegador.` })
+  }
   try {
-    db.prepare('insert into students (id, full_name, enrollment_number, identity_locked, wallet_public_key, created_at) values (?, ?, ?, 1, ?, ?)').run(id, fullName, enrollmentNumber, walletPublicKey, new Date().toISOString())
-    const holder = `did:unlar:student:${id}`
-    db.prepare('insert into wallet_bindings (holder, public_key, created_at) values (?, ?, ?)').run(holder, walletPublicKey, new Date().toISOString())
-  } catch { return reply.code(409).send({ message: 'Ese nombre ya está registrado en esta demo. Pedile al docente que revise el alta.' }) }
+    db.transaction(() => {
+      db.prepare('insert into students (id, full_name, enrollment_number, identity_locked, wallet_public_key, created_at) values (?, ?, ?, 1, ?, ?)').run(id, fullName, enrollmentNumber, walletPublicKey, new Date().toISOString())
+      const holder = `did:unlar:student:${id}`
+      db.prepare('insert into wallet_bindings (holder, public_key, created_at) values (?, ?, ?)').run(holder, walletPublicKey, new Date().toISOString())
+    })()
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : ''
+    if (detail.includes('students.wallet_public_key') || detail.includes('wallet_bindings.public_key')) {
+      return reply.code(409).send({ message: 'Esta billetera ya está asociada a otro registro. Para registrar a otra persona, usá otro dispositivo o perfil de navegador.' })
+    }
+    request.log.error({ err: error }, 'No se pudo guardar el registro invitado')
+    return reply.code(500).send({ message: 'No se pudo completar el registro. Intentá nuevamente.' })
+  }
   const actor: DemoActor = { id, role: isPhotographerName(fullName) ? 'photographer' : 'student', name: fullName, studentId: id }
   const token = randomBytes(32).toString('base64url')
   activeSessions.set(token, actor)
+  regenerateAttendanceFile()
   return reply.code(201).send({ token, actor, enrollmentNumber })
 })
 app.post<{ Body: { walletPublicKey?: string; holderSignature?: string } }>('/api/guests/restore', async (request, reply) => {
   const { walletPublicKey, holderSignature } = request.body ?? {}
   if (!walletPublicKey || !holderSignature) return reply.code(400).send({ message: 'No se encontró la clave de la billetera en este dispositivo.' })
   try {
-    const walletKey = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
-    if (!verify(null, Buffer.from('guest-restore'), walletKey, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'No se pudo comprobar esta billetera.' })
+    if (!verifyWallet('guest-restore', walletPublicKey, holderSignature)) return reply.code(422).send({ message: 'No se pudo comprobar esta billetera.' })
   } catch { return reply.code(422).send({ message: 'La clave guardada en este dispositivo no es válida.' }) }
   const student = db.prepare('select id, full_name as name from students where wallet_public_key = ?').get(walletPublicKey) as { id: string; name: string } | undefined
   if (!student) return reply.code(404).send({ message: 'No encontramos un registro vinculado a esta billetera.' })
@@ -294,9 +362,23 @@ app.post<{ Body: { walletPublicKey?: string; holderSignature?: string } }>('/api
   return { token, actor }
 })
 app.post<{ Body: { account: string; password: string } }>('/api/demo/login', async (request, reply) => {
-  const entry = demoAccounts[request.body?.account]
-  if (!entry || request.body?.password !== entry.password) return reply.code(401).send({ message: 'Usuario o contraseña incorrectos.' })
-  if (entry.actor.role !== 'student' && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip)) return reply.code(403).send({ message: 'El acceso de docente e institución solo está disponible desde la Mac. Abrí la demo en https://localhost:5173/.' })
+  const account = request.body?.account
+  const entry = typeof account === 'string' && Object.hasOwn(demoAccounts, account) ? demoAccounts[account] : undefined
+  const ip = request.ip
+  const previous = loginAttempts.get(ip)
+  const attempt = previous && previous.until > Date.now() ? previous : { count: 0, until: Date.now() + 15 * 60_000 }
+  if (attempt.count >= 10) return reply.header('Retry-After', Math.ceil((attempt.until - Date.now()) / 1000)).code(429).send({ message: 'Demasiados intentos. Esperá 15 minutos antes de volver a ingresar.' })
+  const valid = cloudMode
+    ? !!entry && entry.actor.role !== 'student' && verifyPassword(request.body?.password, passwordHashes[account])
+    : !!entry && request.body?.password === entry.password
+  if (!valid) {
+    attempt.count += 1
+    loginAttempts.set(ip, attempt)
+    return reply.code(401).send({ message: 'Usuario o contraseña incorrectos.' })
+  }
+  if (!entry) return reply.code(401).send({ message: 'Usuario o contraseña incorrectos.' })
+  if (!cloudMode && entry.actor.role !== 'student' && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) return reply.code(403).send({ message: 'El acceso de docente e institución solo está disponible desde la Mac. Abrí la demo en https://localhost:5173/.' })
+  loginAttempts.delete(ip)
   const token = randomBytes(32).toString('base64url')
   activeSessions.set(token, entry.actor)
   return { token, actor: entry.actor, demoOnly: true }
@@ -312,7 +394,7 @@ app.addHook('preHandler', async (request, reply) => {
       || request.method === 'POST' && /^\/api\/attendance\/sessions\/[A-Za-z0-9_-]+\/check-in$/.test(request.url.split('?')[0])
     if (!allowed) return reply.code(403).send({ message: 'El acceso de fotografía solo permite guardar la foto de la clase y usar la billetera propia.' })
   }
-  if (sessionActor && !['student', 'photographer'].includes(sessionActor.role) && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip)) return reply.code(403).send({ message: 'El panel docente e institucional solo está disponible desde la Mac.' })
+  if (!cloudMode && sessionActor && !['student', 'photographer'].includes(sessionActor.role) && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip)) return reply.code(403).send({ message: 'El panel docente e institucional solo está disponible desde la Mac.' })
 })
 function actorFor(request: { headers: { authorization?: string } }) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '')
@@ -326,6 +408,11 @@ function requireRole(request: { headers: { authorization?: string } }, reply: { 
   }
   return actor
 }
+app.post('/api/demo/logout', async (request) => {
+  const token = request.headers.authorization?.replace(/^Bearer\s+/i, '')
+  if (token) activeSessions.delete(token)
+  return { loggedOut: true }
+})
 app.get('/api/demo/me', async (request, reply) => {
   const actor = actorFor(request)
   if (!actor) return reply.code(401).send({ message: 'La sesión venció.' })
@@ -338,7 +425,7 @@ app.post<{ Body: { clientId?: string } }>('/api/presence', async (request, reply
 })
 app.get('/api/issuer-key', async (request, reply) => {
   if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional'])) return
-  return { keyId: issuerId, algorithm: 'Ed25519', publicKeyPem: issuerPublicPem }
+  return { keyId: issuerId, algorithm: 'ML-DSA-65', publicKeyPem: issuerKeys.publicKey }
 })
 app.get('/api/credentials', async (request, reply) => {
   const actor = requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional'])
@@ -350,24 +437,71 @@ app.get('/api/credentials', async (request, reply) => {
   return db.prepare(`select ${columns} from credentials where kind in (${allowed.map(() => '?').join(',')}) order by created_at desc`).all(...allowed)
 })
 app.get('/api/students', async (request, reply) => {
-  if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional'])) return
+  if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional', 'demo-tools'])) return
   const actor = actorFor(request)
   const rows = db.prepare('select id, full_name as fullName, enrollment_number as enrollmentNumber, identity_locked as identityLocked, wallet_public_key as walletPublicKey from students order by id').all() as { id: string; fullName: string; enrollmentNumber: string; identityLocked: number; walletPublicKey: string | null }[]
   const profiles = rows.map(({ walletPublicKey, ...student }) => ({ ...student, walletLinked: Boolean(walletPublicKey) }))
   return actor && ['student', 'photographer'].includes(actor.role) ? profiles.filter((student) => student.id === actor.studentId) : profiles
 })
 
+app.post<{ Body: { raffleId?: string; winners?: { studentId?: string; place?: number }[] } }>('/api/raffle/prize-requests', async (request, reply) => {
+  if (!requireRole(request, reply, ['institutional', 'demo-tools'])) return
+  const winners = request.body?.winners
+  const raffleId = request.body?.raffleId
+  if (!raffleId || !/^[A-Za-z0-9-]{16,80}$/.test(raffleId) || !Array.isArray(winners) || winners.length < 1 || winners.length > 5 || winners.some((winner, index) => !winner.studentId || winner.place !== index + 1)) {
+    return reply.code(400).send({ message: 'El sorteo debe incluir entre uno y cinco puestos en orden.' })
+  }
+  if (winners.some((winner) => demoStudents.some((student) => student.id === winner.studentId))) {
+    return reply.code(400).send({ message: 'Las billeteras de demo están excluidas del sorteo.' })
+  }
+  const createdAt = new Date().toISOString()
+  const ids = winners.map((winner) => winner.studentId!)
+  const placeholders = ids.map(() => '?').join(',')
+  const retireMissing = db.prepare(`update raffle_prize_requests set retired_at = ? where raffle_id = ? and retired_at is null and student_id not in (${placeholders})`)
+  const insert = db.prepare('insert into raffle_prize_requests (id, raffle_id, student_id, student_name, place, created_at) select ?, ?, id, full_name, ?, ? from students where id = ? and wallet_public_key is not null and not exists (select 1 from raffle_prize_requests r where r.raffle_id = ? and r.student_id = students.id and r.retired_at is null)')
+  const tx = db.transaction(() => {
+    retireMissing.run(createdAt, raffleId, ...ids)
+    winners.forEach((winner) => insert.run(randomUUID(), raffleId, winner.place, createdAt, winner.studentId, raffleId))
+    winners.forEach((winner) => db.prepare('update raffle_prize_requests set place = ? where raffle_id = ? and student_id = ? and retired_at is null').run(winner.place, raffleId, winner.studentId))
+  })
+  tx()
+  const count = db.prepare('select count(*) as count from raffle_prize_requests where raffle_id = ? and retired_at is null').get(raffleId) as { count: number }
+  return { created: count.count, skipped: winners.length - count.count }
+})
+app.get('/api/raffle/prize-requests', async (request, reply) => {
+  const actor = requireRole(request, reply, ['institutional', 'demo-tools'])
+  if (!actor) return
+  return db.prepare('select id, raffle_id as raffleId, student_id as studentId, student_name as studentName, place, email, created_at as createdAt, answered_at as answeredAt, retired_at as retiredAt from raffle_prize_requests order by created_at desc, place asc').all()
+})
+app.get('/api/raffle/prize-requests/pending', async (request, reply) => {
+  const actor = requireRole(request, reply, ['student'])
+  if (!actor?.studentId) return
+  return db.prepare('select id, student_name as studentName, place, created_at as createdAt from raffle_prize_requests where student_id = ? and email is null and retired_at is null order by created_at desc').all(actor.studentId)
+})
+app.post<{ Params: { id: string }; Body: { email?: string } }>('/api/raffle/prize-requests/:id/email', async (request, reply) => {
+  const actor = requireRole(request, reply, ['student'])
+  if (!actor?.studentId) return
+  const email = request.body?.email?.trim().toLowerCase()
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ message: 'Ingresá un email válido.' })
+  const result = db.prepare('update raffle_prize_requests set email = ?, answered_at = ? where id = ? and student_id = ? and email is null').run(email, new Date().toISOString(), request.params.id, actor.studentId)
+  if (!result.changes) return reply.code(404).send({ message: 'No se encontró una solicitud pendiente para esta billetera.' })
+  return { saved: true }
+})
+
 app.get('/api/rewards/class-photo', async (request, reply) => {
-  if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional'])) return
+  if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional', 'demo-tools'])) return
   return existsSync(classPhotoPath) ? { available: true, updatedAt: statSync(classPhotoPath).mtime.toISOString() } : { available: false }
 })
 app.get('/api/rewards/class-photo/image', async (request, reply) => {
-  if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional'])) return
+  if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional', 'demo-tools'])) return
   if (!existsSync(classPhotoPath)) return reply.code(404).send({ message: 'Todavía no se guardó la foto de la clase.' })
   return { dataUrl: `data:image/jpeg;base64,${readFileSync(classPhotoPath).toString('base64')}` }
 })
 app.post<{ Body: { dataUrl?: string } }>('/api/rewards/class-photo', async (request, reply) => {
-  if (!requireRole(request, reply, ['photographer'])) return
+  const sessionActor = activeSessions.get(request.headers.authorization?.replace(/^Bearer\s+/i, '') ?? '')
+  if (!sessionActor || !hasPhotographerAccess(sessionActor)) {
+    if (!requireRole(request, reply, ['photographer'])) return
+  }
   const dataUrl = request.body?.dataUrl ?? ''
   const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl)
   if (!match) return reply.code(400).send({ message: 'La imagen debe estar en formato JPEG.' })
@@ -386,9 +520,8 @@ app.post<{ Body: { fullName?: string; walletPublicKey: string; holderSignature: 
   if (request.body.fullName && request.body.fullName.trim() !== student.fullName) return reply.code(403).send({ message: 'El nombre y la matrícula están asociados al perfil y no se pueden editar desde la billetera.' })
   if (student.walletPublicKey && student.walletPublicKey !== walletPublicKey) return reply.code(409).send({ message: 'Este perfil ya está vinculado a otra billetera.' })
   try {
-    const publicKey = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
     const message = `student.${student.id}.${student.enrollmentNumber}`
-    if (!verify(null, Buffer.from(message), publicKey, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'La prueba de posesión de la billetera no es válida.' })
+    if (!verifyWallet(message, walletPublicKey, holderSignature)) return reply.code(422).send({ message: 'La prueba de posesión de la billetera no es válida.' })
   } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
   try { db.prepare('update students set wallet_public_key = ? where id = ? and (wallet_public_key is null or wallet_public_key = ?)').run(walletPublicKey, student.id, walletPublicKey) }
   catch { return reply.code(409).send({ message: 'Esta billetera ya está vinculada a otro perfil.' }) }
@@ -414,11 +547,12 @@ app.get('/api/attendance/export.csv', async (request, reply) => {
 
 app.post('/api/demo/reset', async (request, reply) => {
   if (!requireRole(request, reply, ['teacher'])) return
-  if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip)) return reply.code(403).send({ message: 'El reinicio solo está disponible desde localhost en la Mac.' })
+  if (!cloudMode && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip)) return reply.code(403).send({ message: 'El reinicio solo está disponible desde localhost en la Mac.' })
   const keep = ['mariano-arias-simone', 'peralta-herrar-nahuel']
   db.transaction(() => {
-    for (const table of ['credential_deliveries', 'reward_claims', 'reward_sessions', 'presentation_requests', 'attendance_records', 'attendance_sessions', 'credentials']) db.prepare(`delete from ${table}`).run()
-    db.prepare('delete from wallet_bindings where holder not in (?, ?)').run(...keep.map((id) => `did:unlar:student:${id}`))
+    for (const table of ['raffle_prize_requests', 'credential_deliveries', 'reward_claims', 'reward_sessions', 'presentation_requests', 'attendance_records', 'attendance_sessions', 'credentials']) db.prepare(`delete from ${table}`).run()
+    db.prepare('delete from wallet_bindings').run()
+    db.prepare('update students set wallet_public_key = null').run()
     db.prepare('delete from students where id not in (?, ?)').run(...keep)
   })()
   for (const [token, actor] of activeSessions) if (actor.role === 'student' || actor.role === 'photographer') activeSessions.delete(token)
@@ -428,7 +562,7 @@ app.post('/api/demo/reset', async (request, reply) => {
 })
 
 app.post<{ Body: { title?: string; detail?: string } }>('/api/rewards/sessions', async (request, reply) => {
-  const actor = requireRole(request, reply, ['teacher'])
+  const actor = requireRole(request, reply, ['teacher', 'demo-tools'])
   if (!actor) return
   const title = request.body?.title?.trim() || 'Souvenir · Seminario de Actualización II'
   const detail = request.body?.detail?.trim() || 'Gracias por participar de nuestro proyecto.'
@@ -438,6 +572,14 @@ app.post<{ Body: { title?: string; detail?: string } }>('/api/rewards/sessions',
   const expiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString()
   db.prepare('insert into reward_sessions (code, title, detail, expires_at, created_at) values (?, ?, ?, ?, ?)').run(code, title, detail, expiresAt, createdAt)
   return reply.code(201).send({ code, title, detail, expiresAt })
+})
+
+app.get<{ Params: { id: string } }>('/api/rewards/credentials/:id/preview', async (request, reply) => {
+  const actor = requireRole(request, reply, ['student', 'photographer'])
+  if (!actor) return
+  const reward = db.prepare('select code from reward_claims where credential_id = ? and student_id = ?').get(request.params.id, actor.studentId) as { code: string } | undefined
+  if (!reward) return reply.code(404).send({ message: 'No encontramos este recuerdo en tu perfil.' })
+  return reward
 })
 
 app.post<{ Params: { code: string }; Body: { walletPublicKey?: string; holderSignature?: string } }>('/api/rewards/:code/claim', async (request, reply) => {
@@ -452,8 +594,7 @@ app.post<{ Params: { code: string }; Body: { walletPublicKey?: string; holderSig
   const holder = `did:unlar:student:${actor.studentId}`
   if (walletPublicKey !== student.walletPublicKey || !holderSignature) return reply.code(403).send({ message: 'Este souvenir requiere la billetera vinculada a tu registro.' })
   try {
-    const walletKey = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
-    if (!verify(null, Buffer.from(`reward-claim.${request.params.code}.${holder}`), walletKey, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'No se pudo validar esta billetera.' })
+    if (!verifyWallet(`reward-claim.${request.params.code}.${holder}`, walletPublicKey, holderSignature)) return reply.code(422).send({ message: 'No se pudo validar esta billetera.' })
   } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
   const existing = db.prepare('select c.credential_json as credentialJson from reward_claims rc join credentials c on c.id = rc.credential_id where rc.code = ? and rc.student_id = ?').get(request.params.code, actor.studentId) as { credentialJson: string } | undefined
   if (existing) return { credential: JSON.parse(existing.credentialJson) as SignedCredential, alreadyClaimed: true }
@@ -520,8 +661,7 @@ app.post<{ Params: { code: string }; Body: { walletPublicKey: string; holderSign
   const { walletPublicKey, holderSignature } = request.body ?? {}
   if (!walletPublicKey || !holderSignature) return reply.code(400).send({ message: 'Falta la prueba de posesión de la billetera.' })
   try {
-    const walletKey = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
-    if (!verify(null, Buffer.from(`claim.${request.params.code}.${credential.holder}`), walletKey, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'La prueba de posesión de la billetera no es válida.' })
+    if (!verifyWallet(`claim.${request.params.code}.${credential.holder}`, walletPublicKey, holderSignature)) return reply.code(422).send({ message: 'La prueba de posesión de la billetera no es válida.' })
   } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
   const studentBinding = db.prepare('select wallet_public_key as walletPublicKey from students where id = ?').get(actor.studentId) as { walletPublicKey: string | null } | undefined
   if (!studentBinding?.walletPublicKey || studentBinding.walletPublicKey !== walletPublicKey) return reply.code(403).send({ message: 'Vinculá primero esta billetera al perfil de estudiante correspondiente.' })
@@ -623,9 +763,8 @@ app.post<{ Params: { code: string }; Body: { credential: SignedCredential; walle
   try {
     const binding = db.prepare('select public_key from wallet_bindings where holder = ?').get(credential.holder) as { public_key: string } | undefined
     if (!binding || binding.public_key !== walletPublicKey) return reply.code(422).send({ message: 'Esta credencial no está vinculada a esta billetera.' })
-    const proofKey = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
     const proofMessage = `${request.params.code}.${credential.id}.${credential.holder}`
-    if (!verify(null, Buffer.from(proofMessage), proofKey, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'La prueba de posesión de la billetera no es válida.' })
+    if (!verifyWallet(proofMessage, walletPublicKey, holderSignature)) return reply.code(422).send({ message: 'La prueba de posesión de la billetera no es válida.' })
   } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
   const minimumGradeMet = row.minimumGrade !== null && row.minimumGrade !== undefined ? Number(issuedCredential.claims.nota) >= row.minimumGrade : undefined
   const result = { valid: true, credentialId: credential.id, title: credential.claims.titulo ?? credential.claims.materia ?? credential.type, kind: credential.type, subject: credential.claims.materia, grade: credential.claims.nota, minimumGrade: row.minimumGrade, minimumGradeMet, studentName: credential.claims.nombreEstudiante, verifiedAt: new Date().toISOString() }
@@ -673,9 +812,8 @@ app.post<{ Params: { id: string }; Body: { studentId?: string; walletPublicKey?:
   if (!student) return reply.code(404).send({ message: 'No se encontró el perfil del estudiante.' })
   if (student.walletPublicKey !== walletPublicKey) return reply.code(403).send({ message: 'Esta billetera no está vinculada al perfil registrado.' })
   try {
-    const proofKey = createPublicKey({ key: Buffer.from(walletPublicKey, 'base64'), format: 'der', type: 'spki' })
     const proofMessage = `attendance.${request.params.id}.${student.id}`
-    if (!verify(null, Buffer.from(proofMessage), proofKey, Buffer.from(holderSignature, 'base64url'))) return reply.code(422).send({ message: 'La prueba de posesión de la billetera no es válida.' })
+    if (!verifyWallet(proofMessage, walletPublicKey, holderSignature)) return reply.code(422).send({ message: 'La prueba de posesión de la billetera no es válida.' })
   } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
   try {
     db.prepare('insert into attendance_records (id, session_id, holder, recorded_at, student_id, student_name) values (?, ?, ?, ?, ?, ?)')
@@ -696,6 +834,14 @@ app.post<{ Params: { id: string } }>('/api/attendance/sessions/:id/close', async
   return { id: request.params.id, status: 'Cerrada' }
 })
 
+if (cloudMode) {
+  await app.register(fastifyStatic, { root: join(root, 'dist'), wildcard: false })
+  app.setNotFoundHandler((request, reply) => {
+    if (request.method !== 'GET' || request.url.startsWith('/api/') || request.url.includes('.')) return reply.code(404).send({ message: 'Ruta no encontrada.' })
+    return reply.sendFile('index.html')
+  })
+}
+
 const port = Number(process.env.PORT ?? 4001)
-const host = process.env.HOST ?? '127.0.0.1'
+const host = process.env.HOST ?? (cloudMode ? '0.0.0.0' : '127.0.0.1')
 await app.listen({ port, host })

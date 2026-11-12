@@ -6,14 +6,14 @@ import { signWalletProof, verifyCredential, type SignedCredential } from './lib/
 import { clearWalletCredentials, listWalletCredentials, removeWalletCredential, storeWalletCredential, updateWalletCredentialStatus, type WalletCredential } from './lib/walletStore'
 
 type CredentialKind = 'Alumno regular' | 'Regularidad' | 'Materia aprobada' | 'Nota de materia' | 'Biblioteca' | 'Gimnasio' | 'Souvenir'
-type TabId = 'wallet' | 'issuer' | 'verify' | 'attendance' | 'connection' | 'souvenir' | 'class-photo'
+type TabId = 'wallet' | 'issuer' | 'raffle' | 'verify' | 'attendance' | 'connection' | 'souvenir' | 'class-photo'
 type IssuedCredential = { id: string; kind: CredentialKind; title: string; detail: string; status: string; issuedAt: string; expiresAt: string | null; studentName?: string; enrollmentNumber?: string }
 type DeliveryResponse = { credential: SignedCredential; delivery: { code: string; expiresAt: string } }
 type VerifyRequest = { code: string; kind: CredentialKind; subject?: string; minimumGrade?: number | null; requestNote?: string | null; requiredClaims?: string[]; includeExactGrade?: boolean; expiresAt: string }
 type AttendanceSession = { id: string; subject: string; section: string; expiresAt: string; status: string }
 type SouvenirSession = { code: string; title: string; detail: string; expiresAt: string }
 type DemoStudent = { id: string; fullName: string; enrollmentNumber: string; identityLocked: boolean; walletLinked: boolean }
-type DemoActor = { id: string; role: 'student' | 'teacher' | 'institutional' | 'photographer'; name: string; scope?: 'academic' | 'library' | 'gym'; studentId?: string }
+type DemoActor = { id: string; role: 'student' | 'teacher' | 'institutional' | 'photographer' | 'demo-tools'; name: string; scope?: 'academic' | 'library' | 'gym'; studentId?: string }
 type AttendanceRoster = {
   teacherName: string
   courseName: string
@@ -21,6 +21,9 @@ type AttendanceRoster = {
   students: { id: string; fullName: string; attendance: Record<string, 'P' | 'A'> }[]
 }
 type NetworkInfo = { ssid: string; addresses: string[] }
+type PrizeRequest = { id: string; raffleId?: string | null; studentId?: string; studentName: string; place: number; email?: string | null; createdAt: string; answeredAt?: string | null; retiredAt?: string | null }
+
+const excludedRaffleStudentIds = new Set(['mariano-arias-simone', 'peralta-herrar-nahuel'])
 
 const kinds: CredentialKind[] = ['Alumno regular', 'Regularidad', 'Materia aprobada', 'Nota de materia', 'Biblioteca', 'Gimnasio']
 const tabs: { id: TabId; label: string; icon: string }[] = [
@@ -30,6 +33,7 @@ const tabs: { id: TabId; label: string; icon: string }[] = [
   { id: 'attendance', label: 'Asistencia', icon: '📋' },
   { id: 'connection', label: 'Conexión', icon: '📶' },
   { id: 'souvenir', label: 'Souvenir', icon: '✦' },
+  { id: 'raffle', label: 'Sorteo', icon: '🎡' },
   { id: 'class-photo', label: 'Foto grupal', icon: '📷' },
 ]
 const demoAccounts = [
@@ -39,6 +43,7 @@ const demoAccounts = [
   { id: 'admin-academic', label: 'Gestión Institucional · Área Académica', role: 'institutional' },
   { id: 'admin-library', label: 'Servicios Universitarios · Biblioteca', role: 'institutional' },
   { id: 'admin-gym', label: 'Servicios Universitarios · Gimnasio', role: 'institutional' },
+  { id: 'demo-tools', label: 'Herramientas Demo', role: 'demo-tools' },
 ]
 const iconFor = (kind: CredentialKind) => ({
   'Alumno regular': '🎓',
@@ -165,7 +170,7 @@ async function createSouvenirImage(name: string, title: string, message: string,
 
   context.save(); context.shadowColor = '#ffd66e'; context.shadowBlur = 24; context.drawImage(logo, 112, 88, 92, 92); context.restore()
   context.textAlign = 'left'; context.fillStyle = '#fff'; context.font = '700 34px system-ui, sans-serif'; context.letterSpacing = '0px'
-  context.fillText('Gracias por participar de nuestro proyecto', 232, 145)
+  context.fillText('Billetera Digital Universitaria UNLaR', 232, 145)
 
   context.textAlign = 'left'; context.fillStyle = '#ffe08a'; context.font = '700 20px system-ui, sans-serif'; context.letterSpacing = '3px'
   context.fillText('ESTE RECUERDO ES PARA', 145, 640)
@@ -300,11 +305,12 @@ function QrScanner({ onScan, onClose }: { onScan: (value: string) => void; onClo
 
 function App() {
   const pageParams = new URLSearchParams(window.location.search)
-  const registrationMode = pageParams.get('inicio') !== '1' && (pageParams.get('registro') === '1'
-    || !['localhost', '127.0.0.1', '::1'].includes(window.location.hostname))
+  const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+  const institutionalMode = pageParams.get('acceso') === 'institucional'
+  const registrationMode = !institutionalMode && (!isLocalhost || (pageParams.get('inicio') !== '1' && pageParams.get('registro') === '1'))
   const [actor, setActor] = useState<DemoActor | null>(null)
   const [loginAccount, setLoginAccount] = useState('teacher-marcelo')
-  const [loginPassword, setLoginPassword] = useState('demo2026')
+  const [loginPassword, setLoginPassword] = useState('')
   const [loginError, setLoginError] = useState('')
   const [guestName, setGuestName] = useState('')
   const [guestError, setGuestError] = useState('')
@@ -359,7 +365,7 @@ function App() {
   const [studentId, setStudentId] = useState('')
   const [recipientStudentId, setRecipientStudentId] = useState('mariano-arias-simone')
   const [souvenirTitle, setSouvenirTitle] = useState('Seminario de Actualización II · Ciclo 2026')
-  const [souvenirMessage, setSouvenirMessage] = useState('Gracias por participar de nuestro proyecto.')
+  const [souvenirMessage, setSouvenirMessage] = useState('Gracias por ser parte de la demo de nuestro proyecto!')
   const [souvenirSession, setSouvenirSession] = useState<SouvenirSession | null>(null)
   const [souvenirQrOpen, setSouvenirQrOpen] = useState(false)
   const [souvenirPreview, setSouvenirPreview] = useState<{ image: string; name: string } | null>(null)
@@ -368,6 +374,21 @@ function App() {
   const [classPhotoWorking, setClassPhotoWorking] = useState(false)
   const [classPhotoStatus, setClassPhotoStatus] = useState(false)
   const [demoStudents, setDemoStudents] = useState<DemoStudent[]>([])
+  const [raffleWinners, setRaffleWinners] = useState<DemoStudent[]>([])
+  const [raffleSpinning, setRaffleSpinning] = useState(false)
+  const [raffleWinnerId, setRaffleWinnerId] = useState('')
+  const [raffleRotation, setRaffleRotation] = useState(0)
+  const [rafflePointerName, setRafflePointerName] = useState('')
+  const [raffleCelebration, setRaffleCelebration] = useState(false)
+  const [raffleWinnerTarget, setRaffleWinnerTarget] = useState(2)
+  const [raffleId, setRaffleId] = useState(() => crypto.randomUUID())
+  const [raffleReplaceIndex, setRaffleReplaceIndex] = useState<number | null>(null)
+  const [raffleRedrawStudentId, setRaffleRedrawStudentId] = useState('')
+  const [rafflePrizeRequests, setRafflePrizeRequests] = useState<PrizeRequest[]>([])
+  const [refreshingPrizeRequests, setRefreshingPrizeRequests] = useState(false)
+  const [revealedPrizeEmails, setRevealedPrizeEmails] = useState<Record<string, boolean>>({})
+  const [pendingPrizeRequests, setPendingPrizeRequests] = useState<PrizeRequest[]>([])
+  const [prizeEmailDrafts, setPrizeEmailDrafts] = useState<Record<string, string>>({})
   const [attendanceRoster, setAttendanceRoster] = useState<AttendanceRoster | null>(null)
   const [attendanceDownloadError, setAttendanceDownloadError] = useState('')
   const [attendanceDownloadWorking, setAttendanceDownloadWorking] = useState(false)
@@ -389,8 +410,83 @@ function App() {
   }) : []
   const savedStudent = demoStudents.find((student) => student.id === studentId)
   const goToMainPage = () => window.location.assign(`${window.location.pathname}?inicio=1`)
-  const allowedTabs = tabs.filter((tab) => actor?.role === 'student' ? tab.id === 'wallet' : actor?.role === 'photographer' ? ['wallet', 'class-photo'].includes(tab.id) : actor?.role === 'teacher' ? ['verify', 'attendance', 'connection', 'souvenir'].includes(tab.id) : tab.id === 'issuer')
+  const allowedTabs = tabs.filter((tab) => actor?.studentId === 'mariano-arias-simone' ? ['wallet', 'class-photo'].includes(tab.id) : actor?.role === 'student' ? tab.id === 'wallet' : actor?.role === 'photographer' ? ['wallet', 'class-photo'].includes(tab.id) : actor?.role === 'teacher' ? ['verify', 'attendance', 'class-photo'].includes(tab.id) : actor?.role === 'demo-tools' ? ['raffle', 'connection', 'souvenir'].includes(tab.id) : actor?.role === 'institutional' ? tab.id === 'issuer' : false)
   const allowedKinds: CredentialKind[] = actor?.scope === 'library' ? ['Biblioteca'] : actor?.scope === 'gym' ? ['Gimnasio'] : ['Alumno regular', 'Regularidad', 'Materia aprobada', 'Nota de materia']
+
+  const spinRaffle = (replaceIndex: number | null = null) => {
+    const raffleParticipants = demoStudents.filter((student) => !excludedRaffleStudentIds.has(student.id))
+    const eligible = raffleParticipants.filter((student) => !raffleWinners.some((winner) => winner.id === student.id))
+    if (!eligible.length || raffleSpinning) {
+      if (replaceIndex !== null && !raffleSpinning) {
+        setRaffleReplaceIndex(null)
+        setRaffleRedrawStudentId('')
+        setNotice('No hay otro participante disponible para reemplazar este puesto. Agregá más participantes y volvé a sortear.')
+      }
+      return
+    }
+    const winner = eligible[Math.floor(Math.random() * eligible.length)]
+    const winnerIndex = eligible.findIndex((student) => student.id === winner.id)
+    const segmentAngle = 360 / eligible.length
+    // Our gradient explicitly starts at -90deg (12 o'clock). Labels use the
+    // same segment centers; rotate the chosen center back to the top pointer.
+    const targetAngle = -(winnerIndex + 0.5) * segmentAngle
+    const currentAngle = ((raffleRotation % 360) + 360) % 360
+    const delta = ((targetAngle - currentAngle) % 360 + 360) % 360
+    setRaffleSpinning(true)
+    const duration = 11200
+    const startRotation = raffleRotation
+    const endRotation = raffleRotation + 360 * 8 + delta
+    setRafflePointerName(eligible[Math.floor(((((360 - (startRotation % 360)) % 360) / segmentAngle)) % eligible.length)]?.fullName ?? '')
+    const startedAt = performance.now()
+    const trackPointer = (now: number) => {
+      const progress = Math.min((now - startedAt) / duration, 1)
+      const easedProgress = 1 - Math.pow(1 - progress, 4.2)
+      const angle = startRotation + (endRotation - startRotation) * easedProgress
+      setRaffleRotation(angle)
+      const normalizedPointerAngle = (((-angle % 360) + 360) % 360)
+      const pointedIndex = Math.floor(normalizedPointerAngle / segmentAngle) % eligible.length
+      setRafflePointerName(eligible[pointedIndex]?.fullName ?? '')
+      if (progress < 1) window.requestAnimationFrame(trackPointer)
+    }
+    window.requestAnimationFrame(trackPointer)
+    setRaffleWinnerId(winner.id)
+    window.setTimeout(() => {
+      setRaffleWinners((current) => replaceIndex === null ? [...current, winner] : current.map((entry, index) => index === replaceIndex ? winner : entry))
+      setRaffleSpinning(false)
+      setRaffleReplaceIndex(null)
+      setRafflePointerName(winner.fullName)
+      setRaffleCelebration(true)
+      window.setTimeout(() => setRaffleCelebration(false), 4200)
+      if ((replaceIndex === null && raffleWinners.length + 1 === raffleWinnerTarget) || (replaceIndex !== null && raffleWinners.length === raffleWinnerTarget)) {
+        const winnerIds = replaceIndex === null ? [...raffleWinners, winner] : raffleWinners.map((entry, index) => index === replaceIndex ? winner : entry)
+        const winnerParticipants = demoStudents
+        void api<{ created: number; skipped: number }>('/api/raffle/prize-requests', {
+          method: 'POST',
+          body: JSON.stringify({ raffleId, winners: winnerIds.map((entry, index) => ({ studentId: winnerParticipants.find((student) => student.id === entry.id)?.id, place: index + 1 })) }),
+        }).then(async (result) => {
+          setNotice(`Se avisó a ${result.created} billetera(s) vinculada(s). ${result.skipped ? `${result.skipped} ganador(es) de prueba o sin billetera no recibieron aviso.` : ''}`)
+          setRafflePrizeRequests(await api<PrizeRequest[]>('/api/raffle/prize-requests'))
+        }).catch((error) => setNotice(error instanceof Error ? error.message : 'No se pudieron enviar las solicitudes de email.')).finally(() => setRaffleRedrawStudentId(''))
+      } else setRaffleRedrawStudentId('')
+    }, duration)
+  }
+
+  const submitPrizeEmail = async (requestId: string) => {
+    try {
+      await api(`/api/raffle/prize-requests/${requestId}/email`, { method: 'POST', body: JSON.stringify({ email: prizeEmailDrafts[requestId] ?? '' }) })
+      setPendingPrizeRequests((current) => current.filter((request) => request.id !== requestId))
+      setNotice('Guardamos tu email para enviarte el regalo digital.')
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo guardar el email.') }
+  }
+
+  const refreshPrizeRequestList = async () => {
+    setRefreshingPrizeRequests(true)
+    try {
+      setRafflePrizeRequests(await api<PrizeRequest[]>('/api/raffle/prize-requests'))
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'No se pudo actualizar la lista de emails.')
+    } finally { setRefreshingPrizeRequests(false) }
+  }
 
   useEffect(() => {
     if (activeTab !== 'connection') return
@@ -424,7 +520,7 @@ function App() {
       setActor(result.actor)
       setStudentId(result.actor.studentId ?? '')
       setStudentName(result.actor.role === 'student' ? result.actor.name : '')
-      setActiveTab(result.actor.role === 'student' ? 'wallet' : result.actor.role === 'teacher' ? 'attendance' : 'issuer')
+      setActiveTab(result.actor.role === 'student' ? 'wallet' : result.actor.role === 'photographer' ? 'class-photo' : result.actor.role === 'teacher' ? 'attendance' : result.actor.role === 'demo-tools' ? 'connection' : 'issuer')
       if (result.actor.scope === 'library') setCredentialKind('Biblioteca')
       else if (result.actor.scope === 'gym') setCredentialKind('Gimnasio')
       else setCredentialKind('Materia aprobada')
@@ -467,6 +563,7 @@ function App() {
   }
 
   const logout = () => {
+    void api('/api/demo/logout', { method: 'POST' }).catch(() => undefined)
     localStorage.removeItem('unlar-demo-token')
     localStorage.removeItem('unlar-demo-account')
     setActor(null)
@@ -537,6 +634,8 @@ function App() {
       setAttendance(null)
       setAttendanceRecords([])
       setQr(null)
+      setServerCredentials([])
+      setVerifyResult(null)
       await Promise.all([refreshAttendanceRoster(), refreshStudents()])
       setNotice('La demostración se reinició correctamente. El sistema volvió al estado inicial de prueba.')
     } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo reiniciar la demostración.') }
@@ -557,7 +656,7 @@ function App() {
             setActor(current)
             setStudentId(current.studentId ?? '')
             setStudentName(current.role === 'student' ? current.name : '')
-            setActiveTab(current.role === 'student' ? 'wallet' : current.role === 'photographer' ? 'class-photo' : current.role === 'teacher' ? 'attendance' : 'issuer')
+            setActiveTab(current.role === 'student' ? 'wallet' : current.role === 'photographer' ? 'class-photo' : current.role === 'teacher' ? 'attendance' : current.role === 'demo-tools' ? 'connection' : 'issuer')
             return
           } catch (error) {
             if (!isRegisteredGuest) throw error
@@ -586,12 +685,31 @@ function App() {
 
   useEffect(() => {
     if (!actor) return
-    void refreshWallet()
-    void refreshIssuer().catch(() => undefined)
+    if (actor.role !== 'demo-tools') {
+      void refreshWallet()
+      void refreshIssuer().catch(() => undefined)
+    }
     void refreshStudents().catch(() => undefined)
     if (actor.role === 'teacher') void refreshAttendanceRoster().catch(() => undefined)
     else setAttendanceRoster(null)
+    if (actor.role === 'institutional' || actor.role === 'demo-tools') void api<PrizeRequest[]>('/api/raffle/prize-requests').then(setRafflePrizeRequests).catch(() => undefined)
   }, [actor, refreshAttendanceRoster, refreshIssuer, refreshStudents, refreshWallet])
+
+  useEffect(() => {
+    if (actor?.role !== 'student') return
+    const refreshPrizeRequests = () => { void api<PrizeRequest[]>('/api/raffle/prize-requests/pending').then(setPendingPrizeRequests).catch(() => undefined) }
+    refreshPrizeRequests()
+    const timer = window.setInterval(refreshPrizeRequests, 5000)
+    return () => window.clearInterval(timer)
+  }, [actor?.role])
+
+  useEffect(() => {
+    if (!['institutional', 'demo-tools'].includes(actor?.role ?? '') || activeTab !== 'raffle') return
+    const refreshPrizeEmails = () => { void api<PrizeRequest[]>('/api/raffle/prize-requests').then(setRafflePrizeRequests).catch(() => undefined) }
+    refreshPrizeEmails()
+    const timer = window.setInterval(refreshPrizeEmails, 5000)
+    return () => window.clearInterval(timer)
+  }, [actor?.role, activeTab])
 
   useEffect(() => {
     let clientId = localStorage.getItem('unlar-client-id')
@@ -606,7 +724,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!((activeTab === 'issuer' && actor?.role === 'institutional') || (activeTab === 'souvenir' && actor?.role === 'teacher'))) return
+    if (!((activeTab === 'issuer' && actor?.role === 'institutional') || (activeTab === 'souvenir' && actor?.role === 'demo-tools'))) return
     const refresh = () => { void refreshStudents().catch(() => undefined) }
     refresh()
     const timer = window.setInterval(refresh, 3000)
@@ -826,6 +944,21 @@ function App() {
     finally { setWorking(false) }
   }, [refreshWallet, savedStudent, studentId])
 
+  const openSavedSouvenir = async (credential: SignedCredential) => {
+    setWorking(true)
+    try {
+      const [photo, reward] = await Promise.all([
+        api<{ dataUrl: string }>('/api/rewards/class-photo/image'),
+        api<{ code: string }>(`/api/rewards/credentials/${credential.id}/preview`),
+      ])
+      const name = credential.claims.nombreEstudiante ?? savedStudent?.fullName ?? actor?.name ?? ''
+      const image = await createSouvenirImage(name, credential.claims.titulo, credential.claims.detalle, reward.code, photo.dataUrl)
+      setSouvenirPreview({ image, name })
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'No se pudo abrir el recuerdo.')
+    } finally { setWorking(false) }
+  }
+
   const downloadSouvenir = () => {
     if (!souvenirPreview) return
     const link = document.createElement('a')
@@ -951,7 +1084,7 @@ function App() {
     )
   }
 
-  if (!actor && !registrationMode && !guestAlreadyRegistered) {
+  if (!actor && !registrationMode && (institutionalMode || !guestAlreadyRegistered)) {
     return (
       <main className="login-page">
         <header className="topbar">
@@ -1059,7 +1192,7 @@ function App() {
             <strong className="user-name">{actor.name}</strong>
             <span className="user-role-badge">
               <i className="role-dot" />
-              {actor.role === 'student' ? 'Estudiante' : actor.role === 'photographer' ? 'Fotografía' : actor.role === 'teacher' ? 'Docente' : `Institución · ${actor.scope === 'academic' ? 'Gestión Académica' : actor.scope === 'library' ? 'Biblioteca' : 'Gimnasio'}`}
+              {actor.role === 'student' ? (actor.studentId === 'mariano-arias-simone' ? 'Estudiante · Fotografía' : 'Estudiante') : actor.role === 'photographer' ? 'Fotografía' : actor.role === 'teacher' ? 'Docente' : actor.role === 'demo-tools' ? 'Herramientas Demo' : `Institución · ${actor.scope === 'academic' ? 'Gestión Académica' : actor.scope === 'library' ? 'Biblioteca' : 'Gimnasio'}`}
             </span>
           </div>
           {actor.role !== 'student' && (
@@ -1073,14 +1206,14 @@ function App() {
       <section className="hero">
         <div className="hero-main">
           <p className="eyebrow">Billetera Universitaria Digital</p>
-          <h1>Tus credenciales universitarias, bajo tu control.</h1>
-          <p className="lead">Gestioná tus certificados académicos, accesos a servicios y registro de asistencia en una billetera digital segura y privada.</p>
+          <h1>{actor.role === 'student' ? 'Tu vida universitaria, en un lugar.' : actor.role === 'teacher' ? 'Tu aula, conectada.' : actor.role === 'institutional' ? 'Gestión de credenciales' : 'Una jornada para compartir.'}</h1>
+          <p className="lead">{actor.role === 'student' ? 'Recibí credenciales, acreditá tus estudios y confirmá tu presencia desde tu billetera.' : actor.role === 'teacher' ? 'Registrá la asistencia y verificá las credenciales que comparten tus estudiantes.' : 'Seleccioná un módulo para continuar con las actividades de la jornada.'}</p>
         </div>
         <div className="trust-card">
           <span className="trust-icon" aria-hidden="true">🛡️</span>
           <div>
             <strong>Privacidad y soberanía</strong>
-            <p>Tus datos se guardan en tu dispositivo. Vos elegís qué información compartir en cada verificación.</p>
+            <p>Tus credenciales se guardan en este dispositivo. La institución conserva sus registros; vos elegís qué compartir al verificar.</p>
           </div>
         </div>
       </section>
@@ -1090,6 +1223,7 @@ function App() {
           <button
             className={activeTab === tab.id ? 'tab active' : 'tab'}
             key={tab.id}
+            aria-current={activeTab === tab.id ? 'page' : undefined}
             onClick={() => setActiveTab(tab.id)}
             type="button"
           >
@@ -1149,7 +1283,7 @@ function App() {
             </div>
 
             <div className="wallet-actions">
-              <button type="button" className="primary-button" onClick={() => setScannerOpen(true)}>
+              <button type="button" className="primary-button wallet-scan-desktop" onClick={() => setScannerOpen(true)}>
                 <span>📷</span> Escanear código QR
               </button>
               <span className="muted">Tus credenciales se resguardan de forma segura en este dispositivo.</span>
@@ -1224,7 +1358,10 @@ function App() {
                       <button
                         type="button"
                         className={`credential-card ${cardThemeClass(credential.type)} kind-${credentialKindSlug(credential.type)} ${selectedCredentialId === credential.id ? 'selected' : ''}`}
-                        onClick={() => setSelectedCredentialId(credential.id)}
+                        onClick={() => {
+                          setSelectedCredentialId(credential.id)
+                          if (credential.type === 'Souvenir') void openSavedSouvenir(credential)
+                        }}
                       >
                         <div className="card-chip-strip">
                           <div className={`card-chip chip-${credentialKindSlug(credential.type)}`}>
@@ -1312,7 +1449,7 @@ function App() {
             {selectedCredential ? (
               <>
                 <div className="security-verified-badge">
-                  <span>🛡️</span> Firma digital Ed25519 verificada
+                  <span>🛡️</span> Firma digital ML-DSA-65 verificada
                 </div>
                 <p className="eyebrow">{selectedCredential.type}</p>
                 <h2>{selectedCredential.claims.titulo}</h2>
@@ -1323,7 +1460,7 @@ function App() {
                   <div><dt>Período de vigencia</dt><dd>{selectedCredential.expiresAt ? formatDate(selectedCredential.expiresAt) : 'Permanente (sin vencimiento)'}</dd></div>
                   <div><dt>Titular acreditado</dt><dd>{selectedCredential.claims.nombreEstudiante ?? 'Perfil vinculado'}</dd></div>
                   {selectedCredential.claims.matricula && <div><dt>Número de matrícula</dt><dd>{selectedCredential.claims.matricula}</dd></div>}
-                  <div><dt>Seguridad criptográfica</dt><dd>{selectedCredential.proof.algorithm} (EdDSA)</dd></div>
+                  <div><dt>Seguridad criptográfica</dt><dd>{selectedCredential.proof.algorithm}</dd></div>
                   <div><dt>Estado en registro oficial</dt><dd>{selectedCredential.localStatus}</dd></div>
                 </dl>
               </>
@@ -1463,63 +1600,132 @@ function App() {
               </button>
             </div>
             {serverCredentials.length ? (
-              <div className="issued-credentials-list">
+                <div className="issued-credentials-list">
                 {serverCredentials.map((credential) => (
-                  <div className={`record-card record-card-${credentialKindSlug(credential.kind)}`} key={credential.id}>
-                    <div className="record-main-info">
-                      <div className={`record-icon-wrapper record-icon-${credentialKindSlug(credential.kind)}`}>
-                        <span className="record-icon" aria-hidden="true">{iconFor(credential.kind)}</span>
-                      </div>
-                      <div className="record-copy">
-                        <div className="record-tags-row">
-                          <span className={`record-kind-badge badge-${credentialKindSlug(credential.kind)}`}>
-                            {credential.kind}
+                    <div className="issuer-issued-card-row" key={credential.id}>
+                      <article className={`credential-card issuer-issued-card ${cardThemeClass(credential.kind)} kind-${credentialKindSlug(credential.kind)}`}>
+                        <div className="card-chip-strip">
+                          <div className={`card-chip chip-${credentialKindSlug(credential.kind)}`}><div className="chip-line" /></div>
+                          <span className="card-institution">UNLaR · {credentialCategory(credential.kind).label.toUpperCase()}</span>
+                          <span className={`card-kind-badge badge-${credentialKindSlug(credential.kind)}`}>
+                            {iconFor(credential.kind)} {credential.kind}
                           </span>
-                          {credential.studentName && (
-                            <span className="record-student-pill">
-                              <span className="record-student-label">Titular:</span> {credential.studentName}
-                              {credential.enrollmentNumber ? <span className="record-enrollment"> · Mat. {credential.enrollmentNumber}</span> : ''}
-                            </span>
+                        </div>
+                        <div className="card-body">
+                          <div className="card-title-group">
+                            <span className="card-category-tag">{credentialCategory(credential.kind).label}</span>
+                            <strong className="card-title">{credential.title}</strong>
+                            <span className="card-detail">{credential.detail}</span>
+                          </div>
+                          {credential.kind === 'Nota de materia' && credential.detail.match(/\d+(?:[.,]\d+)?/) && (
+                            <div className="card-grade-badge">
+                              <small>CALIFICACIÓN</small>
+                              <strong>{credential.detail.match(/\d+(?:[.,]\d+)?/)?.[0]} <span className="grade-max">/ 10</span></strong>
+                            </div>
                           )}
                         </div>
-                        <strong className="record-title">{credential.title}</strong>
-                        <span className="record-detail">{credential.detail}</span>
+                        <div className="card-footer">
+                          <div className="card-holder-info">
+                            <small className="card-holder-label">TITULAR ACREDITADO</small>
+                            <span className="card-holder-name">{credential.studentName ?? 'Titular no disponible'}</span>
+                            {credential.enrollmentNumber && <span className="card-holder-matricula">Mat. {credential.enrollmentNumber}</span>}
+                          </div>
+                          <span className={credential.status === 'Activa' ? 'status good' : 'status bad'}>
+                            <i className="status-dot" />{credential.status}
+                          </span>
+                        </div>
+                      </article>
+                      <div className="record-actions issuer-issued-actions">
+                        {credential.status === 'Activa' && (
+                          <button type="button" className="record-revoke-btn" onClick={() => void revokeCredential(credential)}>
+                            Revocar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="trash-icon-button"
+                          aria-label={`Eliminar la credencial «${credential.title}» del registro`}
+                          title="Eliminar credencial"
+                          disabled={credentialDeletingId === credential.id}
+                          onClick={() => void deleteIssuedCredential(credential)}
+                        >
+                          {credentialDeletingId === credential.id ? (
+                            <span className="button-spinner" />
+                          ) : (
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" />
+                            </svg>
+                          )}
+                        </button>
                       </div>
                     </div>
-                    <div className="record-actions">
-                      <span className={credential.status === 'Activa' ? 'status good' : 'status bad'}>
-                        <i className="status-dot" />
-                        {credential.status}
-                      </span>
-                      {credential.status === 'Activa' && (
-                        <button type="button" className="record-revoke-btn" onClick={() => void revokeCredential(credential)}>
-                          Revocar
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="trash-icon-button"
-                        aria-label={`Eliminar la credencial «${credential.title}» del registro`}
-                        title="Eliminar credencial"
-                        disabled={credentialDeletingId === credential.id}
-                        onClick={() => void deleteIssuedCredential(credential)}
-                      >
-                        {credentialDeletingId === credential.id ? (
-                          <span className="button-spinner" />
-                        ) : (
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" />
-                          </svg>
-                        )}
-                      </button>
-                    </div>
-                  </div>
                 ))}
               </div>
             ) : (
               <p className="muted">Todavía no se han emitido credenciales en este panel.</p>
             )}
           </div>
+        </section>
+      )}
+
+      {activeTab === 'raffle' && (actor.role === 'institutional' || actor.role === 'demo-tools') && (
+        <section className="raffle-layout">
+          <div className="panel raffle-panel">
+            <p className="eyebrow">Actividad institucional</p>
+            <h2>Sorteo de participantes</h2>
+            <p className="muted">La ruleta elige cinco personas al azar. Cada ganador se retira de los próximos giros.</p>
+            <label className="raffle-target-select">Ganadores
+              <select value={raffleWinnerTarget} onChange={(event) => { setRaffleWinnerTarget(Number(event.target.value)); setRaffleWinners([]); setRaffleWinnerId(''); setRaffleRotation(0); setRafflePrizeRequests([]); setRaffleId(crypto.randomUUID()); setRaffleReplaceIndex(null) }} disabled={raffleSpinning}>
+                {[1, 2, 3, 4, 5].map((count) => <option key={count} value={count}>{count}</option>)}
+              </select>
+            </label>
+            {(() => {
+              const participants = demoStudents.filter((student) => !excludedRaffleStudentIds.has(student.id))
+              const eligible = participants.filter((student) => !raffleWinners.some((winner) => winner.id === student.id))
+              return <button className="raffle-wheel-button" type="button" onClick={() => spinRaffle()} disabled={raffleSpinning || (raffleWinners.length >= raffleWinnerTarget && raffleReplaceIndex === null) || demoStudents.filter((student) => !excludedRaffleStudentIds.has(student.id) && !raffleWinners.some((winner) => winner.id === student.id)).length === 0} aria-label={raffleSpinning ? 'La ruleta está girando' : `Sortear ganador ${raffleWinners.length + 1}`}>
+              <div className="raffle-wheel-wrap">
+                <span className="raffle-pointer" aria-hidden="true">▼</span>
+                <div className="raffle-wheel" style={{ transform: `rotate(${raffleRotation}deg)`, transition: 'none', background: `conic-gradient(from 0deg, ${eligible.map((_, index) => `${['#1d5b96','#e1ae16','#328b76','#e97b43','#7b63a8','#d86076'][index % 6]} ${(index / Math.max(eligible.length, 1)) * 360}deg ${((index + 1) / Math.max(eligible.length, 1)) * 360}deg`).join(',') || '#dce7f1 0deg 360deg'})` }} />
+                <div className="raffle-label-layer" aria-hidden="true">
+                  {eligible.map((student, index) => {
+                    const angle = ((index + 0.5) * 360) / eligible.length + raffleRotation - 90
+                    const radians = angle * Math.PI / 180
+                    const x = 50 + Math.cos(radians) * 35
+                    const y = 50 + Math.sin(radians) * 35
+                    const distanceToPointer = Math.abs(((angle + 90 + 540) % 360) - 180)
+                    const size = distanceToPointer < 6 ? 'large' : distanceToPointer < 19 ? 'medium' : 'small'
+                    return <span className={`raffle-name-label raffle-name-${size}`} key={student.id} style={{ left: `${x}%`, top: `${y}%` }} title={student.fullName}>{student.fullName}</span>
+                  })}
+                </div>
+                <div className="raffle-wheel-hub" aria-hidden="true" />
+                <div className={`raffle-pointer-readout ${raffleSpinning ? 'is-live' : ''} ${raffleCelebration ? 'is-celebrating' : ''}`} aria-live="polite">
+                  {raffleCelebration && <div className="raffle-confetti" key={raffleWinners.length} aria-hidden="true">{Array.from({ length: 72 }, (_, i) => {
+                    const angle = (i * 137.5) * Math.PI / 180
+                    const distance = 55 + (i % 9) * 15
+                    return <i key={i} style={{ left: `${50 + Math.cos(angle) * distance / 4}%`, top: `${50 + Math.sin(angle) * distance / 2}%`, animationDelay: `${(i % 12) * 18}ms`, backgroundColor: `hsl(${(i * 47) % 360} 95% 55%)`, transform: `rotate(${i * 29}deg)` }} />
+                  })}</div>}
+                  <span>{raffleSpinning ? 'La ruleta señala' : raffleWinnerId ? 'Ganador' : 'En la punta'}</span>
+                  <strong>{rafflePointerName || '—'}</strong>
+                </div>
+              </div>
+              </button>
+            })()}
+            <div className="raffle-result" aria-live="polite">
+              {raffleSpinning ? <><span className="raffle-sparkle">✦</span> La ruleta está girando…</> : raffleWinnerId ? 'El ganador se suma a la lista.' : raffleWinners.length >= raffleWinnerTarget ? '¡Sorteo completo!' : `${demoStudents.filter((student) => !excludedRaffleStudentIds.has(student.id) && !raffleWinners.some((winner) => winner.id === student.id)).length} participantes disponibles`}
+            </div>
+            <div className="raffle-prize-contacts">
+              <div className="raffle-prize-contacts-heading"><h3>Emails para entrega del regalo</h3><button type="button" className="secondary-button" onClick={() => void refreshPrizeRequestList()} disabled={refreshingPrizeRequests}>{refreshingPrizeRequests ? 'Actualizando…' : '↻ Actualizar'}</button></div>
+              <p>Guardados en el registro del sorteo; los emails permanecen ocultos hasta que los reveles.</p>
+              {rafflePrizeRequests.filter((request) => !request.retiredAt && request.studentId !== raffleRedrawStudentId).length ? <ul>{rafflePrizeRequests.filter((request) => !request.retiredAt && request.studentId !== raffleRedrawStudentId).slice().sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.place - b.place).map((request) => <li key={request.id}><strong>{request.place}° · {request.studentName}</strong><span>{request.email ? <>{revealedPrizeEmails[request.id] ? request.email : 'Email recibido'} <button className="reveal-email-button" type="button" aria-label={revealedPrizeEmails[request.id] ? 'Ocultar email' : 'Mostrar email'} onClick={() => setRevealedPrizeEmails((current) => ({ ...current, [request.id]: !current[request.id] }))}>{revealedPrizeEmails[request.id] ? '◉' : '⦸'}</button></> : 'Esperando respuesta'}</span></li>)}</ul> : <p className="raffle-prize-empty">Todavía no hay emails registrados.</p>}
+            </div>
+          </div>
+          <aside className="panel raffle-winners-panel">
+            <p className="eyebrow">Resultados</p>
+            <h2>Ganadores</h2>
+            <p className="muted">Se muestran en el orden en que salieron.</p>
+            {raffleWinners.length ? <ol className="raffle-winners-list">{raffleWinners.map((winner, index) => <li className={`raffle-winner-place-${index + 1}`} key={`${winner.id}-${index}`}><span className="raffle-place">{index + 1}</span><span><strong>{winner.fullName}</strong><small>Matrícula {winner.enrollmentNumber}</small></span><span className="raffle-trophy">{index < 3 ? '🏆' : '•'}</span><button className="raffle-redraw-button" type="button" title={`Volver a sortear el puesto ${index + 1}`} aria-label={`Volver a sortear el puesto ${index + 1}`} disabled={raffleSpinning} onClick={() => { setRaffleReplaceIndex(index); setRaffleRedrawStudentId(winner.id); spinRaffle(index) }}>↻</button></li>)}</ol> : <div className="raffle-empty"><span>🏅</span><p>Los ganadores aparecerán aquí, uno por uno.</p></div>}
+            {raffleWinners.length > 0 && <button type="button" className="secondary-button" onClick={() => { setRaffleWinners([]); setRaffleWinnerId(''); setRafflePrizeRequests([]); setRaffleId(crypto.randomUUID()); setRaffleReplaceIndex(null) }} disabled={raffleSpinning}>Reiniciar sorteo</button>}
+          </aside>
         </section>
       )}
 
@@ -1770,7 +1976,7 @@ function App() {
         </section>
       )}
 
-      {activeTab === 'class-photo' && actor.role === 'photographer' && (
+      {activeTab === 'class-photo' && (actor.role === 'teacher' || actor.role === 'photographer' || actor.studentId === 'mariano-arias-simone') && (
         <section className="layout verify-layout">
           <div className="panel">
             <p className="eyebrow">Registro fotográfico · Responsable de medios</p>
@@ -2053,6 +2259,7 @@ function App() {
         </div>
       )}
 
+
       {pendingAttendance && (
         <div className="consent-backdrop">
           <section className="consent-card" role="dialog" aria-modal="true" aria-label="Confirmar asistencia presencial">
@@ -2157,6 +2364,27 @@ function App() {
         </div>
       )}
       {scannerOpen && <QrScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />}
+      {(actor?.role === 'student' || actor?.role === 'photographer') && <button type="button" className="wallet-scan-fab" onClick={() => setScannerOpen(true)} aria-label="Escanear código QR" title="Escanear código QR">
+        <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+          <path d="M4 11V5h6M22 5h6v6M28 21v6h-6M10 27H4v-6" />
+          <path d="M12 12h3v3h-3zM19 12h3v3h-3zM12 19h3v3h-3zM19 19h2v2h-2zM23 23h4v4h-4zM5 5h5v5H5zM22 5h5v5h-5zM5 22h5v5H5z" />
+        </svg>
+        <span>Escanear</span>
+      </button>}
+      {actor?.role === 'student' && pendingPrizeRequests[0] && (() => {
+        const request = pendingPrizeRequests[0]
+        return <div className="raffle-prize-modal-backdrop">
+          <section className="raffle-prize-modal" role="dialog" aria-modal="true" aria-labelledby="raffle-prize-title">
+            <div className="raffle-prize-modal-icon" aria-hidden="true">🎁</div>
+            <p className="eyebrow">¡Felicitaciones! · {request.place}° puesto</p>
+            <h2 id="raffle-prize-title">Ganaste un regalo digital</h2>
+            <p>Ingresá tu email para que podamos enviártelo. Guardaremos esta dirección para coordinar la entrega del premio.</p>
+            <label>Email para recibir el regalo<input type="email" autoComplete="email" autoFocus value={prizeEmailDrafts[request.id] ?? ''} onChange={(event) => setPrizeEmailDrafts((current) => ({ ...current, [request.id]: event.target.value }))} placeholder="tu@email.com" /></label>
+            <button className="primary-button" type="button" onClick={() => void submitPrizeEmail(request.id)} disabled={!(prizeEmailDrafts[request.id] ?? '').trim()}>Guardar email y continuar</button>
+            <small>El aviso permanecerá aquí hasta que envíes el email.</small>
+          </section>
+        </div>
+      })()}
       <footer>Universidad Nacional de La Rioja · Billetera Universitaria Digital</footer>
     </main>
   )

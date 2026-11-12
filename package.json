@@ -9,10 +9,16 @@
     "server:watch": "tsx watch server/index.ts",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node scripts/test-demo.mjs",
+    "start": "node --experimental-strip-types server/index.ts",
+    "test:access": "node --import tsx --test scripts/test-access.mjs",
+    "test:cloud": "TEST_CLOUD=1 node scripts/test-demo.mjs"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.1",
+    "@fastify/static": "^10.1.10",
+    "@noble/post-quantum": "^0.7.1",
     "@types/qrcode": "^1.5.6",
     "@zxing/browser": "^0.2.1",
     "better-sqlite3": "^13.0.3",

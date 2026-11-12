@@ -35,9 +35,9 @@ export async function updateWalletCredentialStatus(id: string, status: WalletCre
 }
 
 export async function getWalletKeyPair() {
-  return (await database).get('keys', 'holder-key-pair') as Promise<CryptoKeyPair | undefined>
+  return (await database).get('keys', 'holder-ml-dsa-65-key-pair') as Promise<{ publicKey: Uint8Array; secretKey: Uint8Array } | undefined>
 }
 
-export async function storeWalletKeyPair(pair: CryptoKeyPair) {
-  await (await database).put('keys', pair, 'holder-key-pair')
+export async function storeWalletKeyPair(pair: { publicKey: Uint8Array; secretKey: Uint8Array }) {
+  await (await database).put('keys', pair, 'holder-ml-dsa-65-key-pair')
 }
