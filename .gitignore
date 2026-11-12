@@ -30,3 +30,6 @@ certs/local-dev/
 *.njsproj
 *.sln
 *.sw?
+
+# Local UI review screenshots
+.codex-preview/

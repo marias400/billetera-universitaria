@@ -1,7 +1,7 @@
-const CACHE_NAME = 'unlar-wallet-shell-cloud-v4'
+const CACHE_NAME = 'unlar-wallet-shell-brand-v5'
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(['/', '/manifest.webmanifest', '/app-icon.svg', '/unlar-logo.png'])))
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(['/', '/manifest.webmanifest', '/app-icon-192.png', '/app-icon-512.png', '/wallet-mark.png', '/favicon-32x32.png', '/unlar-logo.png'])))
   self.skipWaiting()
 })
 

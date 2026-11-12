@@ -303,6 +303,16 @@ function QrScanner({ onScan, onClose }: { onScan: (value: string) => void; onClo
   )
 }
 
+function BrandLogo() {
+  return (
+    <>
+      <img className="wallet-brand-mark" src="/wallet-mark.png" alt="Billetera Universitaria" width="40" height="40" />
+      <span className="brand-divider" aria-hidden="true" />
+      <img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja — UNLaR" />
+    </>
+  )
+}
+
 function App() {
   const pageParams = new URLSearchParams(window.location.search)
   const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
@@ -1074,7 +1084,7 @@ function App() {
       <main className="login-page">
         <header className="topbar">
           <button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Ir a la página principal">
-            <img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja" />
+            <BrandLogo />
           </button>
         </header>
         <section className="login-card">
@@ -1089,7 +1099,7 @@ function App() {
       <main className="login-page">
         <header className="topbar">
           <button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Ir a la página principal">
-            <img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja" />
+            <BrandLogo />
           </button>
         </header>
         <section className="login-card">
@@ -1129,7 +1139,7 @@ function App() {
       <main className="login-page">
         <header className="topbar">
           <button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Volver a la página principal">
-            <img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja — volver al inicio" />
+            <BrandLogo />
           </button>
         </header>
         <section className="login-card guest-register-card">
@@ -1182,7 +1192,7 @@ function App() {
     <main>
       <header className="topbar">
         <button type="button" className="logo-home-button" onClick={goToMainPage} aria-label="Volver a la página principal">
-          <img className="brand-logo" src="/unlar-logo.png" alt="Universidad Nacional de La Rioja — UNLaR" />
+          <BrandLogo />
         </button>
         <div className="session-badge">
           <div className="user-avatar" aria-hidden="true">
