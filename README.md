@@ -117,7 +117,7 @@ El Dockerfile compila React y sirve la interfaz y la API desde un único servici
 
 ### Reiniciar desde asistencia
 
-El docente autenticado puede usar el botón de reinicio también en Railway. Elimina credenciales, solicitudes y entregas, asistencias, sorteos, souvenirs, la foto grupal y las vinculaciones de billeteras. Borra los participantes invitados y conserva los dos perfiles de laboratorio sin claves vinculadas. Regenera el CSV y cierra las sesiones de los participantes. Conserva las cuentas de acceso, la sesión docente y la clave institucional.
+El docente autenticado puede usar el botón de reinicio también en Railway. Elimina credenciales, solicitudes y entregas, asistencias, sorteos, souvenirs, la foto grupal y las vinculaciones de billeteras. En Railway borra todos los participantes, incluidos los perfiles de laboratorio que pudieran existir. En modo local conserva los dos perfiles de laboratorio sin claves vinculadas. La planilla solo muestra fechas de sesiones reales, sin asistencias de ejemplo. Regenera el CSV y cierra las sesiones de los participantes. Conserva las cuentas de acceso, la sesión docente y la clave institucional.
 
 Los datos de IndexedDB de cada teléfono no pueden borrarse a distancia. Después del reinicio, al recargar la billetera, la aplicación detecta que el registro ya no existe y permite registrarse nuevamente. La clave local puede reutilizarse.
 
