@@ -6,7 +6,7 @@ import { signWalletProof, verifyCredential, type SignedCredential } from './lib/
 import { clearWalletCredentials, listWalletCredentials, removeWalletCredential, storeWalletCredential, updateWalletCredentialStatus, type WalletCredential } from './lib/walletStore'
 
 type CredentialKind = 'Alumno regular' | 'Regularidad' | 'Materia aprobada' | 'Nota de materia' | 'Biblioteca' | 'Gimnasio' | 'Souvenir'
-type TabId = 'wallet' | 'issuer' | 'raffle' | 'verify' | 'attendance' | 'connection' | 'souvenir' | 'class-photo'
+type TabId = 'wallet' | 'issuer' | 'raffle' | 'verify' | 'attendance' | 'connection' | 'souvenir' | 'class-photo' | 'email-requests'
 type IssuedCredential = { id: string; kind: CredentialKind; title: string; detail: string; status: string; issuedAt: string; expiresAt: string | null; studentName?: string; enrollmentNumber?: string }
 type DeliveryResponse = { credential: SignedCredential; delivery: { code: string; expiresAt: string } }
 type VerifyRequest = { code: string; kind: CredentialKind; subject?: string; minimumGrade?: number | null; requestNote?: string | null; requiredClaims?: string[]; includeExactGrade?: boolean; expiresAt: string }
@@ -21,7 +21,7 @@ type AttendanceRoster = {
   students: { id: string; fullName: string; attendance: Record<string, 'P' | 'A'> }[]
 }
 type NetworkInfo = { ssid: string; addresses: string[] }
-type PrizeRequest = { id: string; raffleId?: string | null; studentId?: string; studentName: string; place: number; email?: string | null; createdAt: string; answeredAt?: string | null; retiredAt?: string | null }
+type PrizeRequest = { id: string; raffleId?: string | null; studentId?: string; studentName: string; place: number; source?: 'raffle' | 'manual'; email?: string | null; createdAt: string; answeredAt?: string | null; retiredAt?: string | null }
 
 const excludedRaffleStudentIds = new Set(['mariano-arias-simone', 'peralta-herrar-nahuel'])
 
@@ -34,6 +34,7 @@ const tabs: { id: TabId; label: string; icon: string }[] = [
   { id: 'connection', label: 'Conexión', icon: '📶' },
   { id: 'souvenir', label: 'Souvenir', icon: '✦' },
   { id: 'raffle', label: 'Sorteo', icon: '🎡' },
+  { id: 'email-requests', label: 'Solicitar emails', icon: '✉️' },
   { id: 'class-photo', label: 'Foto grupal', icon: '📷' },
 ]
 const demoAccounts = [
@@ -396,6 +397,10 @@ function App() {
   const [raffleRedrawStudentId, setRaffleRedrawStudentId] = useState('')
   const [rafflePrizeRequests, setRafflePrizeRequests] = useState<PrizeRequest[]>([])
   const [refreshingPrizeRequests, setRefreshingPrizeRequests] = useState(false)
+  const [emailStudentIds, setEmailStudentIds] = useState<string[]>([])
+  const [emailStudentSearch, setEmailStudentSearch] = useState('')
+  const [sendingEmailRequests, setSendingEmailRequests] = useState(false)
+  const [emailRequestResult, setEmailRequestResult] = useState('')
   const [revealedPrizeEmails, setRevealedPrizeEmails] = useState<Record<string, boolean>>({})
   const [pendingPrizeRequests, setPendingPrizeRequests] = useState<PrizeRequest[]>([])
   const [prizeEmailDrafts, setPrizeEmailDrafts] = useState<Record<string, string>>({})
@@ -420,7 +425,7 @@ function App() {
   }) : []
   const savedStudent = demoStudents.find((student) => student.id === studentId)
   const goToMainPage = () => window.location.assign(`${window.location.pathname}?inicio=1`)
-  const allowedTabs = tabs.filter((tab) => actor?.studentId === 'mariano-arias-simone' ? ['wallet', 'class-photo'].includes(tab.id) : actor?.role === 'student' ? tab.id === 'wallet' : actor?.role === 'photographer' ? ['wallet', 'class-photo'].includes(tab.id) : actor?.role === 'teacher' ? ['verify', 'attendance', 'class-photo'].includes(tab.id) : actor?.role === 'demo-tools' ? ['raffle', 'connection', 'souvenir'].includes(tab.id) : actor?.role === 'institutional' ? tab.id === 'issuer' : false)
+  const allowedTabs = tabs.filter((tab) => actor?.studentId === 'mariano-arias-simone' ? ['wallet', 'class-photo'].includes(tab.id) : actor?.role === 'student' ? tab.id === 'wallet' : actor?.role === 'photographer' ? ['wallet', 'class-photo'].includes(tab.id) : actor?.role === 'teacher' ? ['verify', 'attendance', 'class-photo'].includes(tab.id) : actor?.role === 'demo-tools' ? ['raffle', 'connection', 'souvenir', 'email-requests'].includes(tab.id) : actor?.role === 'institutional' ? tab.id === 'issuer' : false)
   const allowedKinds: CredentialKind[] = actor?.scope === 'library' ? ['Biblioteca'] : actor?.scope === 'gym' ? ['Gimnasio'] : ['Alumno regular', 'Regularidad', 'Materia aprobada', 'Nota de materia']
 
   const spinRaffle = (replaceIndex: number | null = null) => {
@@ -481,11 +486,27 @@ function App() {
     }, duration)
   }
 
+  const sendManualEmailRequests = async () => {
+    if (sendingEmailRequests || !emailStudentIds.length) return
+    setSendingEmailRequests(true)
+    setEmailRequestResult('')
+    try {
+      const result = await api<{ created: number; alreadyPending: number }>('/api/demo/email-requests', {
+        method: 'POST', body: JSON.stringify({ studentIds: emailStudentIds }),
+      })
+      setEmailRequestResult(`${result.created} solicitud${result.created === 1 ? '' : 'es'} enviada${result.created === 1 ? '' : 's'}.${result.alreadyPending ? ` ${result.alreadyPending} ya tenían un aviso pendiente.` : ''}`)
+      setEmailStudentIds([])
+      setRafflePrizeRequests(await api<PrizeRequest[]>('/api/raffle/prize-requests'))
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'No se pudieron enviar las solicitudes de email.')
+    } finally { setSendingEmailRequests(false) }
+  }
+
   const submitPrizeEmail = async (requestId: string) => {
     try {
       await api(`/api/raffle/prize-requests/${requestId}/email`, { method: 'POST', body: JSON.stringify({ email: prizeEmailDrafts[requestId] ?? '' }) })
       setPendingPrizeRequests((current) => current.filter((request) => request.id !== requestId))
-      setNotice('Guardamos tu email para enviarte el regalo digital.')
+      setNotice('Guardamos tu email. ¡Gracias!')
     } catch (error) { setNotice(error instanceof Error ? error.message : 'No se pudo guardar el email.') }
   }
 
@@ -582,6 +603,11 @@ function App() {
     setQr(null)
     setPendingAttendance(null)
     setPendingVerify(null)
+    setEmailStudentIds([])
+    setEmailStudentSearch('')
+    setEmailRequestResult('')
+    setRevealedPrizeEmails({})
+    setPendingPrizeRequests([])
   }
 
   const refreshWallet = useCallback(async () => {
@@ -714,7 +740,15 @@ function App() {
   }, [actor?.role])
 
   useEffect(() => {
-    if (!['institutional', 'demo-tools'].includes(actor?.role ?? '') || activeTab !== 'raffle') return
+    if (actor?.role !== 'demo-tools' || activeTab !== 'email-requests') return
+    const refresh = () => { void refreshStudents().catch(() => undefined) }
+    refresh()
+    const timer = window.setInterval(refresh, 5000)
+    return () => window.clearInterval(timer)
+  }, [actor?.role, activeTab, refreshStudents])
+
+  useEffect(() => {
+    if (!['institutional', 'demo-tools'].includes(actor?.role ?? '') || !['raffle', 'email-requests'].includes(activeTab)) return
     const refreshPrizeEmails = () => { void api<PrizeRequest[]>('/api/raffle/prize-requests').then(setRafflePrizeRequests).catch(() => undefined) }
     refreshPrizeEmails()
     const timer = window.setInterval(refreshPrizeEmails, 5000)
@@ -1678,6 +1712,42 @@ function App() {
         </section>
       )}
 
+      {activeTab === 'email-requests' && actor.role === 'demo-tools' && (
+        <section className="manual-email-layout">
+          <div className="panel manual-email-panel">
+            <p className="eyebrow">Herramientas Demo</p>
+            <h2>Solicitar emails</h2>
+            <p>Elegí quiénes recibirán el aviso en su billetera. Podés seleccionar cualquier cantidad de estudiantes.</p>
+            <label className="manual-email-search">Buscar estudiante
+              <input type="search" value={emailStudentSearch} onChange={(event) => setEmailStudentSearch(event.target.value)} placeholder="Nombre o matrícula" />
+            </label>
+            <div className="manual-email-actions">
+              <strong>{emailStudentIds.length} seleccionado{emailStudentIds.length === 1 ? '' : 's'}</strong>
+              <button type="button" className="secondary-button" disabled={sendingEmailRequests} onClick={() => setEmailStudentIds((current) => [...new Set([...current, ...demoStudents.filter((student) => student.walletLinked && normalizeText(`${student.fullName} ${student.enrollmentNumber}`).includes(normalizeText(emailStudentSearch))).map((student) => student.id)])])}>Seleccionar los visibles</button>
+              <button type="button" className="secondary-button" disabled={sendingEmailRequests || !emailStudentIds.length} onClick={() => setEmailStudentIds([])}>Limpiar selección</button>
+            </div>
+            <div className="manual-email-students">
+              {demoStudents.filter((student) => normalizeText(`${student.fullName} ${student.enrollmentNumber}`).includes(normalizeText(emailStudentSearch))).map((student) => (
+                <label key={student.id} className={!student.walletLinked ? 'is-unavailable' : ''}>
+                  <input type="checkbox" checked={emailStudentIds.includes(student.id)} disabled={!student.walletLinked || sendingEmailRequests} onChange={(event) => setEmailStudentIds((current) => event.target.checked ? [...current, student.id] : current.filter((id) => id !== student.id))} />
+                  <span><strong>{student.fullName}</strong><small>{student.enrollmentNumber || 'Sin matrícula'}{!student.walletLinked ? ' · Billetera sin vincular' : ''}</small></span>
+                </label>
+              ))}
+              {!demoStudents.some((student) => normalizeText(`${student.fullName} ${student.enrollmentNumber}`).includes(normalizeText(emailStudentSearch))) && <p>No hay estudiantes que coincidan con la búsqueda.</p>}
+            </div>
+            <button type="button" className="primary-button" disabled={sendingEmailRequests || !emailStudentIds.length} onClick={() => void sendManualEmailRequests()}>{sendingEmailRequests ? 'Enviando avisos…' : `Solicitar email a ${emailStudentIds.length} estudiante${emailStudentIds.length === 1 ? '' : 's'}`}</button>
+            <p className="manual-email-result" role="status">{emailRequestResult}</p>
+            <small>El aviso aparece al abrir la billetera o en su siguiente actualización. No se duplica si ya tiene una solicitud pendiente.</small>
+          </div>
+          <aside className="panel manual-email-panel">
+            <div className="raffle-prize-contacts-heading"><h2>Respuestas</h2><button type="button" className="secondary-button" onClick={() => void refreshPrizeRequestList()} disabled={refreshingPrizeRequests}>{refreshingPrizeRequests ? 'Actualizando…' : '↻ Actualizar'}</button></div>
+            <div className="raffle-prize-contacts">
+              {rafflePrizeRequests.some((request) => request.source === 'manual') ? <ul>{rafflePrizeRequests.filter((request) => request.source === 'manual').map((request) => <li key={request.id}><strong>{request.studentName}</strong><span>{request.email ? <>{revealedPrizeEmails[request.id] ? request.email : 'Email recibido'} <button className="reveal-email-button" type="button" aria-label={revealedPrizeEmails[request.id] ? 'Ocultar email' : 'Mostrar email'} onClick={() => setRevealedPrizeEmails((current) => ({ ...current, [request.id]: !current[request.id] }))}>{revealedPrizeEmails[request.id] ? '◉' : '⦸'}</button></> : 'Esperando respuesta'}</span></li>)}</ul> : <p>Todavía no enviaste solicitudes manuales.</p>}
+            </div>
+          </aside>
+        </section>
+      )}
+
       {activeTab === 'raffle' && (actor.role === 'institutional' || actor.role === 'demo-tools') && (
         <section className="raffle-layout">
           <div className="panel raffle-panel">
@@ -1726,7 +1796,7 @@ function App() {
             <div className="raffle-prize-contacts">
               <div className="raffle-prize-contacts-heading"><h3>Emails para entrega del regalo</h3><button type="button" className="secondary-button" onClick={() => void refreshPrizeRequestList()} disabled={refreshingPrizeRequests}>{refreshingPrizeRequests ? 'Actualizando…' : '↻ Actualizar'}</button></div>
               <p>Guardados en el registro del sorteo; los emails permanecen ocultos hasta que los reveles.</p>
-              {rafflePrizeRequests.filter((request) => !request.retiredAt && request.studentId !== raffleRedrawStudentId).length ? <ul>{rafflePrizeRequests.filter((request) => !request.retiredAt && request.studentId !== raffleRedrawStudentId).slice().sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.place - b.place).map((request) => <li key={request.id}><strong>{request.place}° · {request.studentName}</strong><span>{request.email ? <>{revealedPrizeEmails[request.id] ? request.email : 'Email recibido'} <button className="reveal-email-button" type="button" aria-label={revealedPrizeEmails[request.id] ? 'Ocultar email' : 'Mostrar email'} onClick={() => setRevealedPrizeEmails((current) => ({ ...current, [request.id]: !current[request.id] }))}>{revealedPrizeEmails[request.id] ? '◉' : '⦸'}</button></> : 'Esperando respuesta'}</span></li>)}</ul> : <p className="raffle-prize-empty">Todavía no hay emails registrados.</p>}
+              {rafflePrizeRequests.filter((request) => request.source !== 'manual' && !request.retiredAt && request.studentId !== raffleRedrawStudentId).length ? <ul>{rafflePrizeRequests.filter((request) => request.source !== 'manual' && !request.retiredAt && request.studentId !== raffleRedrawStudentId).slice().sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.place - b.place).map((request) => <li key={request.id}><strong>{request.place}° · {request.studentName}</strong><span>{request.email ? <>{revealedPrizeEmails[request.id] ? request.email : 'Email recibido'} <button className="reveal-email-button" type="button" aria-label={revealedPrizeEmails[request.id] ? 'Ocultar email' : 'Mostrar email'} onClick={() => setRevealedPrizeEmails((current) => ({ ...current, [request.id]: !current[request.id] }))}>{revealedPrizeEmails[request.id] ? '◉' : '⦸'}</button></> : 'Esperando respuesta'}</span></li>)}</ul> : <p className="raffle-prize-empty">Todavía no hay emails registrados.</p>}
             </div>
           </div>
           <aside className="panel raffle-winners-panel">
@@ -2386,7 +2456,7 @@ function App() {
         return <div className="raffle-prize-modal-backdrop">
           <section className="raffle-prize-modal" role="dialog" aria-modal="true" aria-labelledby="raffle-prize-title">
             <div className="raffle-prize-modal-icon" aria-hidden="true">🎁</div>
-            <p className="eyebrow">¡Felicitaciones! · {request.place}° puesto</p>
+            <p className="eyebrow">{request.source === 'manual' ? '¡Felicitaciones!' : `¡Felicitaciones! · ${request.place}° puesto`}</p>
             <h2 id="raffle-prize-title">Ganaste un regalo digital</h2>
             <p>Ingresá tu email para que podamos enviártelo. Guardaremos esta dirección para coordinar la entrega del premio.</p>
             <label>Email para recibir el regalo<input type="email" autoComplete="email" autoFocus value={prizeEmailDrafts[request.id] ?? ''} onChange={(event) => setPrizeEmailDrafts((current) => ({ ...current, [request.id]: event.target.value }))} placeholder="tu@email.com" /></label>

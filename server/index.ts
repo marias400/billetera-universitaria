@@ -95,6 +95,7 @@ if (!presentationRequestColumns.some((column) => column.name === 'include_exact_
 const prizeRequestColumns = db.prepare('pragma table_info(raffle_prize_requests)').all() as { name: string }[]
 if (!prizeRequestColumns.some((column) => column.name === 'raffle_id')) db.exec('alter table raffle_prize_requests add column raffle_id text')
 if (!prizeRequestColumns.some((column) => column.name === 'retired_at')) db.exec('alter table raffle_prize_requests add column retired_at text')
+if (!prizeRequestColumns.some((column) => column.name === 'source')) db.exec("alter table raffle_prize_requests add column source text not null default 'raffle'")
 const attendanceColumns = db.prepare('pragma table_info(attendance_records)').all() as { name: string }[]
 if (!attendanceColumns.some((column) => column.name === 'student_id')) db.exec('alter table attendance_records add column student_id text')
 if (!attendanceColumns.some((column) => column.name === 'student_name')) db.exec('alter table attendance_records add column student_name text')
@@ -468,22 +469,49 @@ app.post<{ Body: { raffleId?: string; winners?: { studentId?: string; place?: nu
   const count = db.prepare('select count(*) as count from raffle_prize_requests where raffle_id = ? and retired_at is null').get(raffleId) as { count: number }
   return { created: count.count, skipped: winners.length - count.count }
 })
+// Manual requests share the student's existing email modal, without creating raffle winners.
+app.post<{ Body: { studentIds?: unknown } }>('/api/demo/email-requests', async (request, reply) => {
+  if (!requireRole(request, reply, ['demo-tools'])) return
+  const ids = request.body?.studentIds
+  if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length) {
+    return reply.code(400).send({ message: 'Elegí al menos un estudiante, sin repetir perfiles.' })
+  }
+  const findStudent = db.prepare('select id, full_name as fullName, wallet_public_key as walletPublicKey from students where id = ?')
+  const students = ids.map((id) => findStudent.get(id) as { id: string; fullName: string; walletPublicKey: string | null } | undefined)
+  if (students.some((student) => !student?.walletPublicKey)) {
+    return reply.code(400).send({ message: 'Todos los estudiantes elegidos deben existir y tener su billetera vinculada.' })
+  }
+  const createdAt = new Date().toISOString()
+  const batchId = randomUUID()
+  const pending = db.prepare('select id from raffle_prize_requests where student_id = ? and email is null and retired_at is null')
+  const insert = db.prepare("insert into raffle_prize_requests (id, raffle_id, student_id, student_name, place, source, created_at) values (?, ?, ?, ?, 0, 'manual', ?)")
+  const created = db.transaction(() => {
+    let count = 0
+    for (const student of students) {
+      if (pending.get(student!.id)) continue
+      insert.run(randomUUID(), batchId, student!.id, student!.fullName, createdAt)
+      count++
+    }
+    return count
+  })()
+  return { created, alreadyPending: ids.length - created }
+})
 app.get('/api/raffle/prize-requests', async (request, reply) => {
   const actor = requireRole(request, reply, ['institutional', 'demo-tools'])
   if (!actor) return
-  return db.prepare('select id, raffle_id as raffleId, student_id as studentId, student_name as studentName, place, email, created_at as createdAt, answered_at as answeredAt, retired_at as retiredAt from raffle_prize_requests order by created_at desc, place asc').all()
+  return db.prepare('select id, raffle_id as raffleId, student_id as studentId, student_name as studentName, place, source, email, created_at as createdAt, answered_at as answeredAt, retired_at as retiredAt from raffle_prize_requests order by created_at desc, place asc').all()
 })
 app.get('/api/raffle/prize-requests/pending', async (request, reply) => {
   const actor = requireRole(request, reply, ['student'])
   if (!actor?.studentId) return
-  return db.prepare('select id, student_name as studentName, place, created_at as createdAt from raffle_prize_requests where student_id = ? and email is null and retired_at is null order by created_at desc').all(actor.studentId)
+  return db.prepare('select id, student_name as studentName, place, source, created_at as createdAt from raffle_prize_requests where student_id = ? and email is null and retired_at is null order by created_at desc').all(actor.studentId)
 })
 app.post<{ Params: { id: string }; Body: { email?: string } }>('/api/raffle/prize-requests/:id/email', async (request, reply) => {
   const actor = requireRole(request, reply, ['student'])
   if (!actor?.studentId) return
   const email = request.body?.email?.trim().toLowerCase()
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ message: 'Ingresá un email válido.' })
-  const result = db.prepare('update raffle_prize_requests set email = ?, answered_at = ? where id = ? and student_id = ? and email is null').run(email, new Date().toISOString(), request.params.id, actor.studentId)
+  const result = db.prepare('update raffle_prize_requests set email = ?, answered_at = ? where id = ? and student_id = ? and email is null and retired_at is null').run(email, new Date().toISOString(), request.params.id, actor.studentId)
   if (!result.changes) return reply.code(404).send({ message: 'No se encontró una solicitud pendiente para esta billetera.' })
   return { saved: true }
 })

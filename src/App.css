@@ -3270,3 +3270,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .user-name { max-width: 82px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .72rem; }
   .switch-user-button { padding: 6px 8px; font-size: .68rem; white-space: nowrap; }
 }
+
+.manual-email-layout { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(300px,.8fr); gap: 22px; align-items: start; }
+.manual-email-panel { padding: 28px; }
+.manual-email-panel > p { color: #5c6d80; line-height: 1.6; }
+.manual-email-search { display: grid; gap: 8px; margin-top: 22px; font-weight: 700; }
+.manual-email-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 18px 0; }
+.manual-email-actions .secondary-button { padding: 8px 12px; font-size: .8rem; }
+.manual-email-students { max-height: 420px; overflow-y: auto; border: 1px solid #dce7f1; border-radius: 12px; margin-bottom: 20px; }
+.manual-email-students > label { display: flex; align-items: center; gap: 13px; padding: 14px 16px; border-bottom: 1px solid #e5edf4; cursor: pointer; }
+.manual-email-students > label:last-child { border-bottom: 0; }
+.manual-email-students > label:has(input:checked) { background: #edf6ff; }
+.manual-email-students input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: #1d5b96; }
+.manual-email-students strong, .manual-email-students small { display: block; }
+.manual-email-students small { color: #6a7b8d; margin-top: 5px; }
+.manual-email-students .is-unavailable { opacity: .6; cursor: default; }
+.manual-email-students > p { padding: 0 16px; }
+.manual-email-result { color: #207a60 !important; font-weight: 700; }
+.manual-email-panel > small { color: #6b7e8f; line-height: 1.5; display: block; }
+@media (max-width: 850px) { .manual-email-layout { grid-template-columns: 1fr; } .manual-email-panel { padding: 20px; } }

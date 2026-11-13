@@ -11,6 +11,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "node scripts/test-demo.mjs",
+    "test:emails": "node scripts/test-manual-emails.mjs",
     "start": "node --experimental-strip-types server/index.ts",
     "test:access": "node --import tsx --test scripts/test-access.mjs",
     "test:cloud": "TEST_CLOUD=1 node scripts/test-demo.mjs"
