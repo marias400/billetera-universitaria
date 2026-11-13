@@ -41,12 +41,37 @@ try {
  const marianoKeys=ml_dsa65.keygen()
  const marianoProof=m=>({walletPublicKey:Buffer.from(marianoKeys.publicKey).toString('base64'),holderSignature:Buffer.from(ml_dsa65.sign(Buffer.from(m),marianoKeys.secretKey)).toString('base64url')})
  const marianoName='Mariano Arias Simone'
+ let legacyIssued
+ let legacyAttendance
+ if(cloud) {
+  const legacyDb=new Database(join(data,'billetera.sqlite'))
+  legacyDb.prepare('insert into students (id,full_name,wallet_public_key,created_at,enrollment_number,identity_locked) values (?,?,?,?,?,1)').run('guest-legacy-mariano',marianoName,marianoProof('').walletPublicKey,new Date().toISOString(),'INV-LEGACY')
+  legacyDb.prepare('insert into wallet_bindings (holder,public_key,created_at) values (?,?,?)').run('did:unlar:student:guest-legacy-mariano',marianoProof('').walletPublicKey,new Date().toISOString())
+  legacyDb.close()
+  legacyIssued=await call('/api/credentials',admin,{kind:'Alumno regular',title:'Registro anterior',detail:'Se conserva al vincular',studentId:'guest-legacy-mariano'},201)
+  legacyAttendance=await call('/api/attendance/sessions',teacher,{subject:'Asistencia anterior'},201)
+  const attendanceDb=new Database(join(data,'billetera.sqlite'))
+  attendanceDb.prepare('insert into attendance_records (id,session_id,holder,recorded_at,student_id,student_name) values (?,?,?,?,?,?)').run('legacy-presence',legacyAttendance.id,'guest-legacy-mariano',new Date().toISOString(),'guest-legacy-mariano',marianoName)
+  attendanceDb.close()
+  const recovered=await call('/api/guests/restore',null,marianoProof('guest-restore'))
+  assert.equal(recovered.actor.studentId,'mariano-arias-simone');checks++
+  assert.equal(recovered.actor.canManageClassPhoto,true);checks++
+ }
  const mariano=await call('/api/guests/register',null,{fullName:marianoName,...marianoProof(`guest-register.${marianoName}`)})
  assert.equal(mariano.actor.studentId,'mariano-arias-simone');checks++
  assert.equal(mariano.actor.canManageClassPhoto,true);checks++
  const restoredMariano=await call('/api/guests/restore',null,marianoProof('guest-restore'))
  assert.equal(restoredMariano.actor.studentId,'mariano-arias-simone');checks++
  assert.equal(restoredMariano.actor.canManageClassPhoto,true);checks++
+ if(legacyIssued) {
+  await call(`/api/attendance/sessions/${legacyAttendance.id}/check-in`,mariano.token,marianoProof(`attendance.${legacyAttendance.id}.mariano-arias-simone`),409)
+  const old=legacyIssued.credential
+  await call(`/api/deliveries/${legacyIssued.delivery.code}/claim`,mariano.token,marianoProof(`claim.${legacyIssued.delivery.code}.${old.holder}`))
+  const request=await call('/api/presentation-requests',teacher,{kind:old.type},201)
+  assert.equal((await call(`/api/presentation-requests/${request.code}/respond`,mariano.token,{credential:old,...marianoProof(`${request.code}.${old.id}.${old.holder}`)})).valid,true);checks++
+  const profiles=await call('/api/students',teacher)
+  assert.equal(profiles.filter(p=>p.fullName===marianoName).length,1);checks++
+ }
  assert.equal((await call('/api/demo/me',teacher)).actor.canManageClassPhoto,false);checks++
  const photo={dataUrl:'data:image/jpeg;base64,/9j/2Q=='}
  await call('/api/rewards/class-photo',teacher,photo,403)

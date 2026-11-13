@@ -62,6 +62,7 @@ db.exec([
   'create table if not exists attendance_sessions (id text primary key, subject text not null, section text not null, expires_at text not null, status text not null default "Abierta", created_at text not null);',
   'create table if not exists attendance_records (id text primary key, session_id text not null references attendance_sessions(id), holder text not null, recorded_at text not null, student_id text, student_name text, unique(session_id, holder));',
   'create table if not exists students (id text primary key, full_name text not null, wallet_public_key text unique, created_at text not null);',
+  'create table if not exists student_profile_aliases (alias_id text primary key, student_id text not null);',
   'create table if not exists credential_deliveries (code text primary key, credential_id text not null, expires_at text not null, used_at text);',
   'create table if not exists reward_sessions (code text primary key, title text not null, detail text not null, expires_at text not null, created_at text not null);',
   'create table if not exists reward_claims (code text not null references reward_sessions(code), student_id text not null references students(id), credential_id text not null references credentials(id), primary key(code, student_id));',
@@ -180,7 +181,7 @@ function getAttendanceRoster() {
   const fixedDates = ['2026-10-13', '2026-10-20']
   const fixedAttendance = new Map([['2026-10-13', 'mariano-arias-simone'], ['2026-10-20', 'peralta-herrar-nahuel']])
   const dateKeys = [...new Set([...sessions.map((session) => dateKey(session.createdAt ?? session.expiresAt)), ...fixedDates])].sort()
-  const students = db.prepare('select id, full_name as fullName from students order by id').all() as { id: string; fullName: string }[]
+  const students = db.prepare('select id, full_name as fullName from students where id not in (select alias_id from student_profile_aliases) order by id').all() as { id: string; fullName: string }[]
   const records = db.prepare('select student_id as studentId, recorded_at as recordedAt from attendance_records where student_id is not null').all() as { studentId: string; recordedAt: string }[]
   const present = new Set(records.map((record) => `${record.studentId}|${dateKey(record.recordedAt)}`))
   return {
@@ -290,6 +291,29 @@ app.get('/api/network-info', async () => {
   }
   return { ssid, addresses }
 })
+// Called only after proving possession of the existing wallet key.
+function linkExistingMariano(walletPublicKey: string) {
+  if (!cloudMode) return
+  const existing = db.prepare('select id, full_name as name from students where wallet_public_key = ?').get(walletPublicKey) as { id: string; name: string } | undefined
+  const canonical = db.prepare('select wallet_public_key as publicKey from students where id = ?').get('mariano-arias-simone') as { publicKey: string | null }
+  const normalized = existing?.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase()
+  if (!existing || existing.id === 'mariano-arias-simone' || normalized !== 'mariano arias simone' || canonical.publicKey) return
+  db.transaction(() => {
+    db.prepare('update students set wallet_public_key = null where id = ?').run(existing.id)
+    db.prepare('update students set wallet_public_key = ? where id = ?').run(walletPublicKey, 'mariano-arias-simone')
+    db.prepare('insert into student_profile_aliases (alias_id, student_id) values (?, ?)').run(existing.id, 'mariano-arias-simone')
+    db.prepare('insert or ignore into wallet_bindings (holder, public_key, created_at) values (?, ?, ?)').run('did:unlar:student:mariano-arias-simone', walletPublicKey, new Date().toISOString())
+    db.prepare('update attendance_records set student_id = ?, student_name = ?, holder = case when holder = ? then ? else holder end where student_id = ?').run('mariano-arias-simone', 'Mariano Arias Simone', existing.id, 'mariano-arias-simone', existing.id)
+    db.prepare('update reward_claims set student_id = ? where student_id = ?').run('mariano-arias-simone', existing.id)
+    db.prepare('update raffle_prize_requests set student_id = ?, student_name = ? where student_id = ?').run('mariano-arias-simone', 'Mariano Arias Simone', existing.id)
+  })()
+  regenerateAttendanceFile()
+}
+function ownsStudentCredential(actor: DemoActor, credential: SignedCredential) {
+  const id = credential.claims.estudianteId
+  if (typeof id !== 'string' || credential.holder !== `did:unlar:student:${id}`) return false
+  return id === actor.studentId || !!db.prepare('select 1 from student_profile_aliases where alias_id = ? and student_id = ?').get(id, actor.studentId)
+}
 app.post<{ Body: { fullName?: string; walletPublicKey?: string; holderSignature?: string } }>('/api/guests/register', async (request, reply) => {
   const fullName = request.body?.fullName?.trim().replace(/\s+/g, ' ')
   const { walletPublicKey, holderSignature } = request.body ?? {}
@@ -300,6 +324,7 @@ app.post<{ Body: { fullName?: string; walletPublicKey?: string; holderSignature?
   } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
   const normalizedName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es')
   const demoStudent = demoStudents.find((student) => normalizedName(student.fullName) === normalizedName(fullName))
+  if (demoStudent?.id === 'mariano-arias-simone') linkExistingMariano(walletPublicKey)
   if (demoStudent && (!cloudMode || demoStudent.id === 'mariano-arias-simone')) {
     const isMariano = normalizedName(demoStudent.fullName) === normalizedName('Mariano Arias Simone')
     db.prepare('insert or ignore into students (id, full_name, enrollment_number, identity_locked, created_at) values (?, ?, ?, 1, ?)').run(demoStudent.id, demoStudent.fullName, demoStudent.enrollmentNumber, new Date().toISOString())
@@ -356,6 +381,7 @@ app.post<{ Body: { walletPublicKey?: string; holderSignature?: string } }>('/api
   try {
     if (!verifyWallet('guest-restore', walletPublicKey, holderSignature)) return reply.code(422).send({ message: 'No se pudo comprobar esta billetera.' })
   } catch { return reply.code(422).send({ message: 'La clave guardada en este dispositivo no es válida.' }) }
+  linkExistingMariano(walletPublicKey)
   const student = db.prepare('select id, full_name as name from students where wallet_public_key = ?').get(walletPublicKey) as { id: string; name: string } | undefined
   if (!student) return reply.code(404).send({ message: 'No encontramos un registro vinculado a esta billetera.' })
   const actor: DemoActor = { id: student.id, role: isPhotographerName(student.name) ? 'photographer' : 'student', name: student.name, studentId: student.id }
@@ -401,7 +427,9 @@ app.addHook('preHandler', async (request, reply) => {
 function actorFor(request: { headers: { authorization?: string } }) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '')
   const actor = token ? activeSessions.get(token) : undefined
-  return actor ? withPhotoAccess(actor) : undefined
+  if (!actor) return undefined
+  const alias = actor.studentId ? db.prepare('select student_id as studentId from student_profile_aliases where alias_id = ?').get(actor.studentId) as { studentId: string } | undefined : undefined
+  return withPhotoAccess(alias ? { ...actor, studentId: alias.studentId } : actor)
 }
 function requireRole(request: { headers: { authorization?: string } }, reply: { code: (status: number) => { send: (body: { message: string }) => unknown } }, roles: DemoRole[]) {
   const actor = actorFor(request)
@@ -443,7 +471,8 @@ app.get('/api/students', async (request, reply) => {
   if (!requireRole(request, reply, ['student', 'photographer', 'teacher', 'institutional', 'demo-tools'])) return
   const actor = actorFor(request)
   const rows = db.prepare('select id, full_name as fullName, enrollment_number as enrollmentNumber, identity_locked as identityLocked, wallet_public_key as walletPublicKey from students order by id').all() as { id: string; fullName: string; enrollmentNumber: string; identityLocked: number; walletPublicKey: string | null }[]
-  const profiles = rows.map(({ walletPublicKey, ...student }) => ({ ...student, walletLinked: Boolean(walletPublicKey) }))
+  const aliases = new Set((db.prepare('select alias_id from student_profile_aliases').all() as { alias_id: string }[]).map((row) => row.alias_id))
+  const profiles = rows.filter((student) => !aliases.has(student.id)).map(({ walletPublicKey, ...student }) => ({ ...student, walletLinked: Boolean(walletPublicKey) }))
   return actor && ['student', 'photographer'].includes(actor.role) ? profiles.filter((student) => student.id === actor.studentId) : profiles
 })
 
@@ -528,7 +557,7 @@ app.get('/api/rewards/class-photo/image', async (request, reply) => {
   return { dataUrl: `data:image/jpeg;base64,${readFileSync(classPhotoPath).toString('base64')}` }
 })
 app.post<{ Body: { dataUrl?: string } }>('/api/rewards/class-photo', async (request, reply) => {
-  const sessionActor = activeSessions.get(request.headers.authorization?.replace(/^Bearer\s+/i, '') ?? '')
+  const sessionActor = actorFor(request)
   if (!sessionActor || !hasPhotographerAccess(sessionActor)) {
     return reply.code(403).send({ message: 'Solo la billetera de Mariano tiene permiso para guardar la foto grupal.' })
   }
@@ -580,6 +609,7 @@ app.post('/api/demo/reset', async (request, reply) => {
   if (!cloudMode && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip)) return reply.code(403).send({ message: 'El reinicio solo está disponible desde localhost en la Mac.' })
   const keep = ['mariano-arias-simone', 'peralta-herrar-nahuel']
   db.transaction(() => {
+    db.prepare('delete from student_profile_aliases').run()
     for (const table of ['raffle_prize_requests', 'credential_deliveries', 'reward_claims', 'reward_sessions', 'presentation_requests', 'attendance_records', 'attendance_sessions', 'credentials']) db.prepare(`delete from ${table}`).run()
     db.prepare('delete from wallet_bindings').run()
     db.prepare('update students set wallet_public_key = null').run()
@@ -687,7 +717,7 @@ app.post<{ Params: { code: string }; Body: { walletPublicKey: string; holderSign
   const credentialRow = db.prepare('select credential_json from credentials where id = ?').get(delivery.credential_id) as { credential_json: string } | undefined
   if (!credentialRow?.credential_json) return reply.code(404).send({ message: 'La credencial ya no está disponible.' })
   const credential = JSON.parse(credentialRow.credential_json) as SignedCredential
-  if (credential.claims.estudianteId !== actor.studentId || credential.holder !== `did:unlar:student:${actor.studentId}`) return reply.code(403).send({ message: 'Esta credencial fue emitida para otro perfil de estudiante.' })
+  if (!ownsStudentCredential(actor, credential)) return reply.code(403).send({ message: 'Esta credencial fue emitida para otro perfil de estudiante.' })
   const { walletPublicKey, holderSignature } = request.body ?? {}
   if (!walletPublicKey || !holderSignature) return reply.code(400).send({ message: 'Falta la prueba de posesión de la billetera.' })
   try {
@@ -788,7 +818,7 @@ app.post<{ Params: { code: string }; Body: { credential: SignedCredential; walle
   const credentialSubject = issuedCredential.claims.materia ?? issuedCredential.claims.titulo ?? ''
   if (row.subject && normalizeSubject(credentialSubject) !== normalizeSubject(row.subject)) return reply.code(422).send({ message: `Se solicitó una credencial de ${row.subject}.` })
   if (row.minimumGrade !== null && row.minimumGrade !== undefined && !Number.isFinite(Number(issuedCredential.claims.nota))) return reply.code(422).send({ message: 'La credencial no contiene una nota verificable.' })
-  if (issuedCredential.claims.estudianteId !== actor.studentId || credential.holder !== `did:unlar:student:${actor.studentId}`) return reply.code(403).send({ message: 'Esta credencial no pertenece al perfil de estudiante activo.' })
+  if (!ownsStudentCredential(actor, issuedCredential)) return reply.code(403).send({ message: 'Esta credencial no pertenece al perfil de estudiante activo.' })
   if ((stored.expires_at && Date.parse(stored.expires_at) <= Date.now()) || (credential.expiresAt && Date.parse(credential.expiresAt) <= Date.now())) return reply.code(422).send({ message: 'La credencial venció.' })
   try {
     const binding = db.prepare('select public_key from wallet_bindings where holder = ?').get(credential.holder) as { public_key: string } | undefined
