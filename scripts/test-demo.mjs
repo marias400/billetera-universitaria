@@ -37,6 +37,25 @@ try {
  const proof=m=>({walletPublicKey,holderSignature:Buffer.from(ml_dsa65.sign(Buffer.from(m),secretKey)).toString('base64url')})
  const guest=await call('/api/guests/register',null,{fullName:'Prueba Integral',...proof('guest-register.Prueba Integral')},201)
  const token=guest.token, studentId=guest.actor.studentId
+ assert.equal(guest.actor.canManageClassPhoto,false);checks++
+ const marianoKeys=ml_dsa65.keygen()
+ const marianoProof=m=>({walletPublicKey:Buffer.from(marianoKeys.publicKey).toString('base64'),holderSignature:Buffer.from(ml_dsa65.sign(Buffer.from(m),marianoKeys.secretKey)).toString('base64url')})
+ const marianoName='Mariano Arias Simone'
+ const mariano=await call('/api/guests/register',null,{fullName:marianoName,...marianoProof(`guest-register.${marianoName}`)})
+ assert.equal(mariano.actor.studentId,'mariano-arias-simone');checks++
+ assert.equal(mariano.actor.canManageClassPhoto,true);checks++
+ const restoredMariano=await call('/api/guests/restore',null,marianoProof('guest-restore'))
+ assert.equal(restoredMariano.actor.studentId,'mariano-arias-simone');checks++
+ assert.equal(restoredMariano.actor.canManageClassPhoto,true);checks++
+ assert.equal((await call('/api/demo/me',teacher)).actor.canManageClassPhoto,false);checks++
+ const photo={dataUrl:'data:image/jpeg;base64,/9j/2Q=='}
+ await call('/api/rewards/class-photo',teacher,photo,403)
+ await call('/api/rewards/class-photo',token,photo,403)
+ await call('/api/rewards/class-photo',restoredMariano.token,photo)
+ if(cloud) {
+  const otherKeys=ml_dsa65.keygen()
+  await call('/api/guests/register',null,{fullName:marianoName,walletPublicKey:Buffer.from(otherKeys.publicKey).toString('base64'),holderSignature:Buffer.from(ml_dsa65.sign(Buffer.from(`guest-register.${marianoName}`),otherKeys.secretKey)).toString('base64url')},409)
+ }
  assert.ok(readFileSync(join(data,'planilla-asistencia.csv'),'utf8').includes('Prueba Integral'));checks++
  await call('/api/guests/restore',null,proof('guest-restore'))
  const payload={kind:'Materia aprobada', title:'Bases de Datos',detail:'Aprobada',studentId}

@@ -25,8 +25,9 @@ const demoStudents = [
   { id: 'peralta-herrar-nahuel', fullName: 'Peralta Herrera Nahuel', enrollmentNumber: 'DEMO-ISI-002' },
 ]
 type DemoRole = 'student' | 'teacher' | 'institutional' | 'photographer' | 'demo-tools'
-type DemoActor = { id: string; role: DemoRole; name: string; scope?: 'academic' | 'library' | 'gym'; studentId?: string }
-const hasPhotographerAccess = (actor: DemoActor) => actor.role === 'teacher' || (!cloudMode && (actor.role === 'photographer' || actor.studentId === 'mariano-arias-simone'))
+type DemoActor = { id: string; role: DemoRole; name: string; scope?: 'academic' | 'library' | 'gym'; studentId?: string; canManageClassPhoto?: boolean }
+const hasPhotographerAccess = (actor: DemoActor) => actor.role === 'student' && actor.studentId === 'mariano-arias-simone'
+const withPhotoAccess = (actor: DemoActor): DemoActor => ({ ...actor, canManageClassPhoto: hasPhotographerAccess(actor) })
 const isPhotographerName = (name: string) => {
   if (cloudMode) return false
   const normalizedName = name.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -299,14 +300,14 @@ app.post<{ Body: { fullName?: string; walletPublicKey?: string; holderSignature?
   } catch { return reply.code(422).send({ message: 'La clave de la billetera no es válida.' }) }
   const normalizedName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es')
   const demoStudent = demoStudents.find((student) => normalizedName(student.fullName) === normalizedName(fullName))
-  if (demoStudent && !cloudMode) {
+  if (demoStudent && (!cloudMode || demoStudent.id === 'mariano-arias-simone')) {
     const isMariano = normalizedName(demoStudent.fullName) === normalizedName('Mariano Arias Simone')
     db.prepare('insert or ignore into students (id, full_name, enrollment_number, identity_locked, created_at) values (?, ?, ?, 1, ?)').run(demoStudent.id, demoStudent.fullName, demoStudent.enrollmentNumber, new Date().toISOString())
     const savedStudent = db.prepare('select wallet_public_key as walletPublicKey from students where id = ?').get(demoStudent.id) as { walletPublicKey: string | null } | undefined
     if (!savedStudent) return reply.code(500).send({ message: 'No se pudo preparar el perfil de asistencia.' })
-    if (!isMariano && savedStudent.walletPublicKey && savedStudent.walletPublicKey !== walletPublicKey) return reply.code(409).send({ message: 'Este perfil de demo ya está vinculado a otra billetera. Usá el teléfono donde se vinculó por primera vez.' })
+    if ((!isMariano || cloudMode) && savedStudent.walletPublicKey && savedStudent.walletPublicKey !== walletPublicKey) return reply.code(409).send({ message: 'Este perfil de demo ya está vinculado a otra billetera. Usá el teléfono donde se vinculó por primera vez.' })
     try {
-      if (isMariano && savedStudent.walletPublicKey !== walletPublicKey) {
+      if (isMariano && !cloudMode && savedStudent.walletPublicKey !== walletPublicKey) {
         db.prepare('delete from wallet_bindings where holder = ?').run(`did:unlar:student:${demoStudent.id}`)
         db.prepare('update students set wallet_public_key = ? where id = ?').run(walletPublicKey, demoStudent.id)
       } else {
@@ -321,7 +322,7 @@ app.post<{ Body: { fullName?: string; walletPublicKey?: string; holderSignature?
     const actor: DemoActor = { id: demoStudent.id, role: 'student', name: demoStudent.fullName, studentId: demoStudent.id }
     const token = randomBytes(32).toString('base64url')
     activeSessions.set(token, actor)
-    return reply.code(200).send({ token, actor, enrollmentNumber: demoStudent.enrollmentNumber, demoProfile: true })
+    return reply.code(200).send({ token, actor: withPhotoAccess(actor), enrollmentNumber: demoStudent.enrollmentNumber, demoProfile: true })
   }
   const id = `guest-${randomUUID()}`
   const enrollmentNumber = `INV-${randomBytes(4).toString('hex').toUpperCase()}`
@@ -347,7 +348,7 @@ app.post<{ Body: { fullName?: string; walletPublicKey?: string; holderSignature?
   const token = randomBytes(32).toString('base64url')
   activeSessions.set(token, actor)
   regenerateAttendanceFile()
-  return reply.code(201).send({ token, actor, enrollmentNumber })
+  return reply.code(201).send({ token, actor: withPhotoAccess(actor), enrollmentNumber })
 })
 app.post<{ Body: { walletPublicKey?: string; holderSignature?: string } }>('/api/guests/restore', async (request, reply) => {
   const { walletPublicKey, holderSignature } = request.body ?? {}
@@ -360,7 +361,7 @@ app.post<{ Body: { walletPublicKey?: string; holderSignature?: string } }>('/api
   const actor: DemoActor = { id: student.id, role: isPhotographerName(student.name) ? 'photographer' : 'student', name: student.name, studentId: student.id }
   const token = randomBytes(32).toString('base64url')
   activeSessions.set(token, actor)
-  return { token, actor }
+  return { token, actor: withPhotoAccess(actor) }
 })
 app.post<{ Body: { account: string; password: string } }>('/api/demo/login', async (request, reply) => {
   const account = request.body?.account
@@ -382,7 +383,7 @@ app.post<{ Body: { account: string; password: string } }>('/api/demo/login', asy
   loginAttempts.delete(ip)
   const token = randomBytes(32).toString('base64url')
   activeSessions.set(token, entry.actor)
-  return { token, actor: entry.actor, demoOnly: true }
+  return { token, actor: withPhotoAccess(entry.actor), demoOnly: true }
 })
 app.addHook('preHandler', async (request, reply) => {
   if (!request.url.startsWith('/api/') || request.url === '/api/demo/login' || request.url === '/api/network-info' || request.url === '/api/presence' || request.url === '/api/guests/register' || request.url === '/api/guests/restore') return
@@ -399,7 +400,8 @@ app.addHook('preHandler', async (request, reply) => {
 })
 function actorFor(request: { headers: { authorization?: string } }) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '')
-  return token ? activeSessions.get(token) : undefined
+  const actor = token ? activeSessions.get(token) : undefined
+  return actor ? withPhotoAccess(actor) : undefined
 }
 function requireRole(request: { headers: { authorization?: string } }, reply: { code: (status: number) => { send: (body: { message: string }) => unknown } }, roles: DemoRole[]) {
   const actor = actorFor(request)
@@ -528,7 +530,7 @@ app.get('/api/rewards/class-photo/image', async (request, reply) => {
 app.post<{ Body: { dataUrl?: string } }>('/api/rewards/class-photo', async (request, reply) => {
   const sessionActor = activeSessions.get(request.headers.authorization?.replace(/^Bearer\s+/i, '') ?? '')
   if (!sessionActor || !hasPhotographerAccess(sessionActor)) {
-    if (!requireRole(request, reply, ['photographer'])) return
+    return reply.code(403).send({ message: 'Solo la billetera de Mariano tiene permiso para guardar la foto grupal.' })
   }
   const dataUrl = request.body?.dataUrl ?? ''
   const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl)

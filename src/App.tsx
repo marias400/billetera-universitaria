@@ -13,7 +13,7 @@ type VerifyRequest = { code: string; kind: CredentialKind; subject?: string; min
 type AttendanceSession = { id: string; subject: string; section: string; expiresAt: string; status: string }
 type SouvenirSession = { code: string; title: string; detail: string; expiresAt: string }
 type DemoStudent = { id: string; fullName: string; enrollmentNumber: string; identityLocked: boolean; walletLinked: boolean }
-type DemoActor = { id: string; role: 'student' | 'teacher' | 'institutional' | 'photographer' | 'demo-tools'; name: string; scope?: 'academic' | 'library' | 'gym'; studentId?: string }
+type DemoActor = { id: string; role: 'student' | 'teacher' | 'institutional' | 'photographer' | 'demo-tools'; name: string; scope?: 'academic' | 'library' | 'gym'; studentId?: string; canManageClassPhoto?: boolean }
 type AttendanceRoster = {
   teacherName: string
   courseName: string
@@ -425,7 +425,7 @@ function App() {
   }) : []
   const savedStudent = demoStudents.find((student) => student.id === studentId)
   const goToMainPage = () => window.location.assign(`${window.location.pathname}?inicio=1`)
-  const allowedTabs = tabs.filter((tab) => actor?.studentId === 'mariano-arias-simone' ? ['wallet', 'class-photo'].includes(tab.id) : actor?.role === 'student' ? tab.id === 'wallet' : actor?.role === 'photographer' ? ['wallet', 'class-photo'].includes(tab.id) : actor?.role === 'teacher' ? ['verify', 'attendance', 'class-photo'].includes(tab.id) : actor?.role === 'demo-tools' ? ['raffle', 'connection', 'souvenir', 'email-requests'].includes(tab.id) : actor?.role === 'institutional' ? tab.id === 'issuer' : false)
+  const allowedTabs = tabs.filter((tab) => actor?.canManageClassPhoto ? ['wallet', 'class-photo'].includes(tab.id) : actor?.role === 'student' || actor?.role === 'photographer' ? tab.id === 'wallet' : actor?.role === 'teacher' ? ['verify', 'attendance'].includes(tab.id) : actor?.role === 'demo-tools' ? ['raffle', 'connection', 'souvenir', 'email-requests'].includes(tab.id) : actor?.role === 'institutional' ? tab.id === 'issuer' : false)
   const allowedKinds: CredentialKind[] = actor?.scope === 'library' ? ['Biblioteca'] : actor?.scope === 'gym' ? ['Gimnasio'] : ['Alumno regular', 'Regularidad', 'Materia aprobada', 'Nota de materia']
 
   const spinRaffle = (replaceIndex: number | null = null) => {
@@ -551,7 +551,7 @@ function App() {
       setActor(result.actor)
       setStudentId(result.actor.studentId ?? '')
       setStudentName(result.actor.role === 'student' ? result.actor.name : '')
-      setActiveTab(result.actor.role === 'student' ? 'wallet' : result.actor.role === 'photographer' ? 'class-photo' : result.actor.role === 'teacher' ? 'attendance' : result.actor.role === 'demo-tools' ? 'connection' : 'issuer')
+      setActiveTab(result.actor.role === 'student' || result.actor.role === 'photographer' ? 'wallet' : result.actor.role === 'teacher' ? 'attendance' : result.actor.role === 'demo-tools' ? 'connection' : 'issuer')
       if (result.actor.scope === 'library') setCredentialKind('Biblioteca')
       else if (result.actor.scope === 'gym') setCredentialKind('Gimnasio')
       else setCredentialKind('Materia aprobada')
@@ -573,8 +573,8 @@ function App() {
       setActor(result.actor)
       setStudentId(result.actor.studentId ?? '')
       setStudentName(result.actor.name)
-      setActiveTab(result.actor.role === 'photographer' ? 'class-photo' : 'wallet')
-      setNotice(result.actor.role === 'photographer' ? 'Acceso de fotografía listo. Tomá la foto grupal para guardarla en el sistema.' : `¡Billetera creada con éxito, ${result.actor.name}! Ya podés registrar asistencia y recibir credenciales.`)
+      setActiveTab('wallet')
+      setNotice(result.actor.canManageClassPhoto ? 'Tu perfil de Mariano está listo. Podés tomar la foto desde «Foto grupal».' : `¡Billetera creada con éxito, ${result.actor.name}! Ya podés registrar asistencia y recibir credenciales.`)
       window.history.replaceState({}, '', window.location.pathname)
     } catch (error) { setGuestError(error instanceof Error ? error.message : 'No se pudo completar el registro de la billetera.') }
     finally { setLoginWorking(false) }
@@ -589,7 +589,7 @@ function App() {
     setActor(result.actor)
     setStudentId(result.actor.studentId ?? '')
     setStudentName(result.actor.name)
-    setActiveTab(result.actor.role === 'photographer' ? 'class-photo' : 'wallet')
+    setActiveTab('wallet')
     setNotice(`Bienvenido/a nuevamente, ${result.actor.name}. Tu billetera se recuperó exitosamente.`)
   }
 
@@ -1236,7 +1236,7 @@ function App() {
             <strong className="user-name">{actor.name}</strong>
             <span className="user-role-badge">
               <i className="role-dot" />
-              {actor.role === 'student' ? (actor.studentId === 'mariano-arias-simone' ? 'Estudiante · Fotografía' : 'Estudiante') : actor.role === 'photographer' ? 'Fotografía' : actor.role === 'teacher' ? 'Docente' : actor.role === 'demo-tools' ? 'Herramientas Demo' : `Institución · ${actor.scope === 'academic' ? 'Gestión Académica' : actor.scope === 'library' ? 'Biblioteca' : 'Gimnasio'}`}
+              {actor.role === 'student' ? (actor.canManageClassPhoto ? 'Estudiante · Fotografía' : 'Estudiante') : actor.role === 'photographer' ? 'Estudiante' : actor.role === 'teacher' ? 'Docente' : actor.role === 'demo-tools' ? 'Herramientas Demo' : `Institución · ${actor.scope === 'academic' ? 'Gestión Académica' : actor.scope === 'library' ? 'Biblioteca' : 'Gimnasio'}`}
             </span>
           </div>
           {actor.role !== 'student' && (
@@ -2056,7 +2056,7 @@ function App() {
         </section>
       )}
 
-      {activeTab === 'class-photo' && (actor.role === 'teacher' || actor.role === 'photographer' || actor.studentId === 'mariano-arias-simone') && (
+      {activeTab === 'class-photo' && actor.canManageClassPhoto && (
         <section className="layout verify-layout">
           <div className="panel">
             <p className="eyebrow">Registro fotográfico · Responsable de medios</p>
