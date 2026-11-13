@@ -173,19 +173,21 @@ async function createSouvenirImage(name: string, title: string, message: string,
   context.textAlign = 'left'; context.fillStyle = '#fff'; context.font = '700 34px system-ui, sans-serif'; context.letterSpacing = '0px'
   context.fillText('Billetera Digital Universitaria UNLaR', 232, 145)
 
-  context.textAlign = 'left'; context.fillStyle = '#ffe08a'; context.font = '700 20px system-ui, sans-serif'; context.letterSpacing = '3px'
-  context.fillText('ESTE RECUERDO ES PARA', 145, 640)
   const displayName = name.trim().replace(/\s+/g, ' ')
-  context.font = 'italic 104px "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive'; context.letterSpacing = '0px'
-  while (context.measureText(displayName).width > 1080 && parseInt(context.font.match(/\d+/)?.[0] ?? '104', 10) > 68) {
-    const size = parseInt(context.font.match(/\d+/)?.[0] ?? '104', 10) - 6
-    context.font = `italic ${size}px "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive`
+  if (displayName) {
+    context.textAlign = 'left'; context.fillStyle = '#ffe08a'; context.font = '700 20px system-ui, sans-serif'; context.letterSpacing = '3px'
+    context.fillText('ESTE RECUERDO ES PARA', 145, 640)
+    context.font = 'italic 104px "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive'; context.letterSpacing = '0px'
+    while (context.measureText(displayName).width > 1080 && parseInt(context.font.match(/\d+/)?.[0] ?? '104', 10) > 68) {
+      const size = parseInt(context.font.match(/\d+/)?.[0] ?? '104', 10) - 6
+      context.font = `italic ${size}px "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive`
+    }
+    context.save(); context.shadowColor = '#ffe08a'; context.shadowBlur = 20; context.lineWidth = 2; context.strokeStyle = 'rgba(42, 27, 8, .7)'; context.fillStyle = '#fff4ce'
+    context.strokeText(displayName, 145, 760); context.fillText(displayName, 145, 760); context.restore()
   }
-  context.save(); context.shadowColor = '#ffe08a'; context.shadowBlur = 20; context.lineWidth = 2; context.strokeStyle = 'rgba(42, 27, 8, .7)'; context.fillStyle = '#fff4ce'
-  context.strokeText(displayName, 145, 760); context.fillText(displayName, 145, 760); context.restore()
 
   context.textAlign = 'left'; context.fillStyle = '#fff'; context.font = '500 25px system-ui, sans-serif'; context.letterSpacing = '0px'
-  const messageWords = message.trim().split(/\s+/); let messageLine = ''; let messageY = 825
+  const messageWords = message.trim().split(/\s+/); let messageLine = ''; let messageY = displayName ? 825 : 760
   messageWords.forEach((word) => {
     const next = messageLine ? `${messageLine} ${word}` : word
     if (context.measureText(next).width > 1050 && messageLine) { context.fillText(messageLine, 150, messageY); messageY += 38; messageLine = word } else messageLine = next
@@ -196,7 +198,7 @@ async function createSouvenirImage(name: string, title: string, message: string,
   context.fillStyle = '#fff8df'; context.beginPath(); context.roundRect(1300, 680, 170, 170, 16); context.fill()
   context.drawImage(qrImage, 1310, 690, 150, 150); context.restore()
   context.textAlign = 'center'; context.fillStyle = '#fff0bf'; context.font = '700 15px system-ui, sans-serif'; context.letterSpacing = '1px'
-  context.fillText('MI BILLETERA · SOUVENIR', 1385, 875)
+  context.fillText(displayName ? 'MI BILLETERA · SOUVENIR' : 'RECUERDO DEL GRUPO', 1385, 875)
   context.fillStyle = '#fff'; context.font = '600 13px system-ui, sans-serif'; context.letterSpacing = '0px'
   context.fillText(title.toLocaleUpperCase('es-AR').slice(0, 24), 1385, 904)
   return canvas.toDataURL('image/png')
@@ -967,8 +969,9 @@ function App() {
         if (!(await verifyCredential(response.credential, key.publicKeyPem))) throw new Error('La firma digital del recuerdo no es válida. No se guardó en la billetera.')
         await storeWalletCredential(response.credential)
         await refreshWallet()
-        const image = await createSouvenirImage(response.credential.claims.nombreEstudiante ?? savedStudent.fullName, response.credential.claims.titulo, response.credential.claims.detalle, code, photo.dataUrl)
-        setSouvenirPreview({ image, name: response.credential.claims.nombreEstudiante ?? savedStudent.fullName })
+        const name = studentId === 'mariano-arias-simone' ? '' : response.credential.claims.nombreEstudiante ?? savedStudent.fullName
+        const image = await createSouvenirImage(name, response.credential.claims.titulo, response.credential.claims.detalle, code, photo.dataUrl)
+        setSouvenirPreview({ image, name })
         setActiveTab('wallet')
         setNotice(response.alreadyClaimed ? 'Tu recuerdo conmemorativo ya estaba guardado en tu billetera. Acá podés volver a verlo y descargarlo.' : '¡Felicitaciones! Tu recuerdo personalizado ya se encuentra en tu billetera.')
       } else if (type === 'verify') {
@@ -995,7 +998,7 @@ function App() {
         api<{ dataUrl: string }>('/api/rewards/class-photo/image'),
         api<{ code: string }>(`/api/rewards/credentials/${credential.id}/preview`),
       ])
-      const name = credential.claims.nombreEstudiante ?? savedStudent?.fullName ?? actor?.name ?? ''
+      const name = studentId === 'mariano-arias-simone' ? '' : credential.claims.nombreEstudiante ?? savedStudent?.fullName ?? actor?.name ?? ''
       const image = await createSouvenirImage(name, credential.claims.titulo, credential.claims.detalle, reward.code, photo.dataUrl)
       setSouvenirPreview({ image, name })
     } catch (error) {
@@ -1007,7 +1010,7 @@ function App() {
     if (!souvenirPreview) return
     const link = document.createElement('a')
     link.href = souvenirPreview.image
-    link.download = `souvenir-unlar-${souvenirPreview.name.trim().replace(/\s+/g, '-').toLowerCase()}.png`
+    link.download = `souvenir-unlar-${souvenirPreview.name.trim().replace(/\s+/g, '-').toLowerCase() || 'grupal'}.png`
     link.click()
   }
 
@@ -2421,16 +2424,16 @@ function App() {
       )}
       {souvenirPreview && (
         <div className="souvenir-backdrop">
-          <section className="souvenir-card" role="dialog" aria-modal="true" aria-label="Tu recuerdo personalizado">
+          <section className="souvenir-card" role="dialog" aria-modal="true" aria-label={souvenirPreview.name ? 'Tu recuerdo personalizado' : 'Recuerdo para compartir con el grupo'}>
             <button type="button" className="souvenir-close" onClick={() => setSouvenirPreview(null)} aria-label="Cerrar">×</button>
             <div className="souvenir-fireworks fireworks-one" />
             <div className="souvenir-fireworks fireworks-two" />
             <div className="souvenir-heading">
               <span>✦</span>
               <h2>¡Tu recuerdo conmemorativo está listo!</h2>
-              <p>Personalizado para {souvenirPreview.name}</p>
+              <p>{souvenirPreview.name ? `Personalizado para ${souvenirPreview.name}` : 'Sin nombre, listo para compartir con todo el grupo'}</p>
             </div>
-            <img className="souvenir-image" src={souvenirPreview.image} alt={`Recuerdo conmemorativo personalizado para ${souvenirPreview.name}`} />
+            <img className="souvenir-image" src={souvenirPreview.image} alt={souvenirPreview.name ? `Recuerdo conmemorativo personalizado para ${souvenirPreview.name}` : 'Recuerdo conmemorativo del grupo'} />
             <div className="souvenir-actions">
               <button type="button" className="primary-button" onClick={downloadSouvenir}>
                 Descargar imagen
