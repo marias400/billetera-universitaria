@@ -1,126 +1,131 @@
 # Billetera Universitaria Verificable
 
-Prototipo para Seminario de Actualización II. Reúne credenciales académicas, acceso a servicios institucionales y asistencia mediante una misma billetera.
+Una app web para guardar y mostrar constancias universitarias desde tu navegador. Por ejemplo, un área académica puede emitir una constancia de **Materia aprobada**, el estudiante la guarda escaneando un QR y el docente puede pedirle que la muestre. El estudiante revisa la solicitud y decide si quiere compartirla.
 
-## Estado actual
+La app comprueba que la constancia fue firmada por el emisor de la demo, que sigue vigente y que pertenece a la billetera que la presenta. El docente también puede tomar asistencia con un QR y descargar la planilla.
 
-El prototipo ya implementa una demo de flujo entre dispositivos:
+El proyecto se hizo para **Seminario de Actualización II**. Usá las cuentas y los datos de prueba para explorar el prototipo.
 
-- El emisor crea credenciales ficticias y el servidor las firma con ML-DSA-65.
-- La clave privada del emisor se genera en el primer inicio y se guarda en `data/`, excluida de Git.
-- El emisor genera un QR de entrega, de un solo uso y con vencimiento a los diez minutos.
-- La billetera escanea el QR, valida la firma y guarda la credencial y su clave de dispositivo en IndexedDB.
-- La primera recepción vincula el identificador de estudiante de prueba a esa billetera.
-- Un verificador genera una solicitud QR de un solo uso; el estudiante ve qué se pide, acepta o rechaza, y el verificador consulta el resultado.
-- El servidor verifica firma institucional, revocación, vencimiento, uso de la solicitud y prueba de posesión de la billetera.
-- El prototipo separa los perfiles Estudiante, Profesor e Institución. El profesor Marcelo Roldan abre sesiones de asistencia con QR de un minuto; el servidor solo permite leerlo y confirmar la presencia desde la misma red local privada que usó el profesor, además de exigir el perfil de estudiante correspondiente y rechazar duplicados.
-- Las cuentas de laboratorio incluyen a los estudiantes Mariano Arias Simone y Peralta Herrera Nahuel, al profesor Marcelo Roldan y a áreas institucionales académica, Biblioteca y Gimnasio. Todas usan la clave de demo `demo2026`.
-- Los perfiles de estudiantes tienen nombres y matrículas ficticios, inmutables desde la billetera. Las credenciales nuevas incluyen nombre, matrícula e identificador del perfil como claims protegidos por la firma institucional.
-- Al elegir “Nota de materia”, el emisor solicita una nota de 1 a 10 y la incluye en los claims firmados de la credencial.
-- El backend requiere una sesión de demo y aplica permisos por rol. Los usuarios académicos emiten credenciales académicas; Biblioteca y Gimnasio solo emiten y revocan las propias; el profesor gestiona asistencia y solicitudes de verificación.
-- La planilla de Seminario de Actualización II se actualiza en `data/planilla-asistencia.csv` después de cada sesión, alta de alumno o presencia. La pantalla Asistencia muestra la matriz P/A y permite descargar el CSV para Excel o Numbers.
-- La interfaz funciona como PWA instalable en Android y usa la cámara para leer QR cuando se sirve por HTTPS.
-- Se incorporó el logo de UNLaR adjuntado para el prototipo; en modo desarrollo se desactiva el service worker para evitar que una caché vieja deje la página móvil sin cargar.
+## Qué podés hacer con cada perfil
 
-Es una demo académica con perfiles y matrículas ficticios. La identidad bloqueada y los roles son una simulación de laboratorio, no autentican usuarios de UNLaR ni deben usarse para registros oficiales. La clave de demo es compartida y visible; no constituye una barrera de seguridad para producción. Una versión real requiere autenticación institucional, padrón validado, gestión de cuentas y protección operativa de claves.
+| Perfil | Qué puede hacer |
+| --- | --- |
+| Estudiante | Recibir constancias, consultarlas en **Mi billetera**, compartirlas y marcar asistencia. |
+| Docente | Pedir una constancia para verificarla, abrir una sesión de asistencia y descargar la planilla. |
+| Área Académica | Emitir constancias, como regularidad, materias aprobadas y notas. |
+| Biblioteca y Gimnasio | Emitir credenciales de su propio servicio. |
 
-## Identidad visual UNLaR
+## Cómo instalarla en tu computadora
 
-La interfaz usa el logo entregado para este proyecto, más azul institucional, acento dorado, tipografía sans serif y una jerarquía sobria. La [Resolución HCS 15/2025](https://digesto.unlar.edu.ar/archivos/3638_HCS-15-2025_280880.pdf) indica que la Universidad aprobó un Manual de Marca Institucional y nuevos logos.
+Vas a necesitar **Windows, macOS o Linux**, conexión a Internet para la instalación y un navegador actualizado. Con la computadora podés entrar y explorar los perfiles. Para practicar con los QR, la guía incluye un paso opcional para usar el celular.
 
-No se publicó un enlace descargable al manual ni a sus archivos maestros durante esta investigación. El logo recibido se usa tal como fue adjuntado; la aplicación no afirma aplicar la tipografía oficial del manual. Antes de distribuir una versión institucional, corresponde contrastar el arte final con los lineamientos vigentes de UNLaR.
+### 1. Instalá Node.js 24 LTS
 
-## Presentación del seminario
+Node.js es el programa que permite ejecutar la app en tu computadora. Elegí la versión **24 LTS** desde el selector y seguí los pasos del instalador o las instrucciones para tu sistema. La instalación incluye **npm**, que descarga las bibliotecas que usa el proyecto. [Descargar Node.js](https://nodejs.org/en/download)
 
-El [borrador de presentación](docs/borrador-presentacion.md) propone una charla de 36 minutos con la demostración al final y reserva aproximadamente el 42% para explicar la implementación con código. Incluye el guion por diapositiva, fragmentos/archivos a mostrar y la secuencia para los dos Android.
+Abrí **Símbolo del sistema (CMD)** en Windows o **Terminal** en macOS o Linux. Escribí estos comandos de a uno y presioná Enter después de cada línea.
 
-## Ejecución
+```sh
+node -v
+npm -v
+```
 
-Con Node.js instalado globalmente:
+El primero debería mostrar `v24` seguido de otros números. El segundo muestra la versión de npm.
 
-    npm install
+### 2. Descargá y descomprimí el proyecto
 
-En una terminal, iniciar la API local y la base SQLite:
+1. En la portada de GitHub, verificá que el selector de ramas diga **main**. Hacé clic en **Code → Download ZIP**. También podés usar la [descarga directa del ZIP](https://github.com/marias400/billetera-universitaria/archive/refs/heads/main.zip).
+2. En Descargas, extraé el archivo. En Windows, hacé clic derecho y elegí **Extraer todo**. En macOS, hacé doble clic. En Linux, usá la opción **Extraer aquí** del gestor de archivos.
+3. Ubicá la carpeta extraída `billetera-universitaria-main`. Es la que contiene el archivo `package.json`.
 
-    npm run server
+### 3. Instalá las bibliotecas del proyecto
 
-En otra terminal, iniciar la interfaz:
+En CMD o Terminal, escribí `cd` seguido de un espacio, arrastrá la carpeta extraída a la ventana y presioná Enter. Si tu terminal no admite arrastrar carpetas, copiá su ruta y pegala entre comillas después de `cd`. En Windows, usá `cd /d` en lugar de `cd` si la carpeta está en otra unidad.
 
-    npm run dev -- --host 0.0.0.0
+Ahora ejecutá este comando y esperá hasta que termine. Solo necesitás hacer este paso la primera vez o cuando descargues una versión nueva.
 
-Para tomar asistencia, iniciá el servidor en una computadora conectada al Wi-Fi del aula y abrí la aplicación desde la dirección local de esa computadora, por ejemplo `https://IP-DE-LA-COMPUTADORA:5173`. Los estudiantes deben abrirla desde la misma red. Mantené el servidor dentro de esa red y no uses un túnel público ni lo expongas a Internet durante la asistencia.
+```sh
+npm ci
+```
 
-### Escaneo desde Android
+### 4. Iniciá la app
 
-Los navegadores Android solo habilitan la cámara y la instalación de la PWA en un contexto seguro HTTPS. Para una demo en vivo, iniciá un túnel HTTPS temporal hacia Vite, por ejemplo con Cloudflare Tunnel:
+1. En esa misma ventana, ejecutá el siguiente comando. Inicia el servidor que guarda y verifica los datos. Dejá la ventana abierta.
 
-    cloudflared tunnel --url http://localhost:5173
+   ```sh
+   npm run server
+   ```
 
-Abrí en ambos celulares la dirección `https://...trycloudflare.com` que muestre el túnel. Vite reenvía las rutas `/api` y `/health` a la API local del puerto 4001. El túnel expone la aplicación a Internet mientras esté encendido, por lo que no debe usarse para tomar asistencia. Usá solo datos ficticios y cerralo al terminar.
+2. Abrí **otra ventana** de CMD o Terminal y volvé a entrar en la carpeta del proyecto como en el paso 3. Ejecutá el siguiente comando para iniciar la página web. Dejá abierta también esta ventana.
 
-En el celular del estudiante, abrí `Mi billetera` → `Escanear QR con la cámara`. La primera vez, aceptá el permiso de cámara. Se recomienda instalar la página en la pantalla de inicio para presentar la demo como una app.
+   ```sh
+   npm run dev -- --host 127.0.0.1
+   ```
 
-### Prueba local por ADB inalámbrico
+3. Abrí [http://localhost:5173](http://localhost:5173) en el navegador. Si la segunda ventana muestra otro puerto junto a **Local**, usá la dirección que aparece ahí. Vas a ver la pantalla **Iniciar sesión**.
 
-También se puede probar sin un túnel público, usando el puente inalámbrico de Android:
+### 5. Entrá con una cuenta de prueba
 
-1. En Android, activá **Opciones para desarrolladores → Depuración inalámbrica → Vincular dispositivo con código**. La Mac y el teléfono deben estar en la misma red Wi-Fi.
-2. En la Mac, ejecutá `adb pair IP:PUERTO_DE_VINCULACIÓN` e ingresá el código temporal que aparece en el teléfono.
-3. Luego ejecutá `adb connect IP:PUERTO_DE_CONEXIÓN` usando la dirección de conexión que muestra Depuración inalámbrica.
-4. Ejecutá `adb reverse tcp:5173 tcp:5173`.
-5. En Chrome Android, abrí `http://localhost:5173`. La Mac puede abrir la misma dirección en su navegador y actuar como emisor/verificador.
+Elegí un perfil de la lista y usá la contraseña **`demo2026`**. Para empezar, probá **Gestión Institucional · Área Académica** y entrá en **Emisión**. Desde **Cambiar perfil** podés pasar a **Docente · Marcelo Roldán** y ver **Verificar** y **Asistencia**.
 
-El ejecutable `adb` se instala con Android Platform Tools. Si se usa cable USB, se puede autorizar la computadora y aplicar el mismo `adb reverse` sin emparejar por Wi-Fi.
+Para apagar la app, presioná **Ctrl+C** en cada ventana. La próxima vez empezá en el paso 4 y usá la dirección que aparezca junto a **Local**. La computadora guarda los registros en la carpeta `data/` y la billetera conserva sus credenciales en el navegador donde las recibiste.
 
-#### Abrir los dos Android desde la Mac
+## Cómo probar los QR con el celular
 
-El proyecto incluye un lanzador para conectar los dos equipos, iniciar la app local si hace falta, abrirla en ambos teléfonos y mostrar sus pantallas lado a lado con scrcpy:
+Para esta prueba, la computadora muestra los QR y el celular hace de billetera del estudiante. Usá tu computadora y tu celular de prueba en la misma red Wi-Fi. El navegador del celular necesita una conexión HTTPS de confianza para habilitar la cámara.
 
-    ./scripts/android-doble-pantalla.sh
+### Prepará el acceso desde el celular
 
-El programa pide el IP:puerto de conexión que figura en **Depuración inalámbrica** para cada teléfono. Si un equipo todavía no está emparejado con esta Mac, ingresá también su IP:puerto de **Vincular dispositivo con código** y el código temporal. Si ya se emparejó antes, dejá vacío ese dato. El código se solicita sin mostrarlo en pantalla y no se guarda.
+1. Buscá la **dirección IPv4** de tu computadora en los detalles de la conexión Wi-Fi. Suele verse como `192.168.1.25`. En Windows también podés ejecutar `ipconfig` en CMD y buscar la dirección IPv4 del adaptador Wi-Fi.
+2. Instalá **mkcert**, que genera certificados HTTPS para pruebas locales. En Windows podés ejecutar `winget install --id FiloSottile.mkcert -e` y abrir una nueva ventana de CMD. En macOS, si ya usás Homebrew, ejecutá `brew install mkcert`. Para las demás opciones, seguí las [instrucciones de instalación de mkcert](https://github.com/FiloSottile/mkcert#installation).
+3. Desde la carpeta del proyecto, ejecutá estos comandos de a uno. Reemplazá `192.168.1.25` por la dirección de tu computadora. Si la carpeta `certs/local-dev` ya existe, podés saltar la línea `mkdir`.
 
-Android puede cambiar los puertos de conexión al desactivar o reiniciar Depuración inalámbrica; en ese caso, copiá el puerto nuevo que aparece en la pantalla del teléfono. La Mac y ambos Android deben compartir la red Wi-Fi. El lanzador conserva la conexión ADB hasta que se cierren las ventanas de scrcpy y deja los registros de inicio de la app en `logs/`.
+   ```sh
+   mkcert -install
+   mkdir -p certs/local-dev
+   mkcert -key-file certs/local-dev/server-key.pem -cert-file certs/local-dev/server-cert.pem localhost 127.0.0.1 192.168.1.25
+   mkcert -CAROOT
+   ```
 
-Si Android muestra la pestaña en blanco con esa dirección, normalmente se perdió el puente inalámbrico: `localhost` apunta al propio teléfono y solo funciona con `adb reverse` activo. Confirmá la conexión con `adb devices`; si no aparece el teléfono, volvé a vincular Depuración inalámbrica y ejecutá `adb reverse tcp:5173 tcp:5173`. Recargá la página para quitar una posible caché de desarrollo anterior. Si accedés por la IP de la Mac, usá HTTPS para habilitar cámara y WebCrypto.
+   En **CMD de Windows**, escribí la línea que crea la carpeta como `mkdir certs\local-dev`.
 
-### Secuencia de demostración
+4. El último comando muestra la carpeta donde mkcert dejó **`rootCA.pem`**. Copiá ese certificado al celular y, si el teléfono lo pide, cambiá el nombre de la copia a `rootCA.crt`. Guardá `rootCA-key.pem` y `server-key.pem` en la computadora, ya que son claves privadas.
 
-1. En cada dispositivo, elegí la cuenta de demo correspondiente e ingresá la clave compartida `demo2026`.
-2. En el Mac, ingresá como Administración académica, elegí un estudiante de prueba y emití “Materia aprobada” para “Bases de Datos”.
-3. En el Android del estudiante destinatario, vinculá su billetera y escaneá el QR de entrega. La billetera valida la firma y recibe una credencial con nombre y matrícula del perfil de laboratorio.
-4. En la Mac, ingresá como Profesor · Marcelo Roldan, solicitá “Materia aprobada” y generá el QR.
-5. En el celular del estudiante, escaneá la solicitud y confirmá el envío; en la Mac, consultá el resultado.
-6. Para emitir credenciales de Biblioteca o Gimnasio, cambiá a la cuenta institucional de esa área: su lista de tipos y sus permisos quedan limitados al ámbito correspondiente.
-7. En la cuenta del profesor, abrí `Asistencia`; desde cada perfil estudiante escaneá el QR y confirmá la presencia. La matriz P/A se actualiza automáticamente y el CSV local se reescribe en la Mac.
+   - En **Android**, buscá **Instalar un certificado → Certificado de CA** en Ajustes, elegí el archivo y después abrí Chrome. Los nombres de los menús pueden variar.
+   - En **iPhone**, abrí el archivo, instalá el perfil descargado desde Ajustes y activá su confianza completa en **Ajustes → General → Información → Ajustes de confianza de certificados**. [Guía de Apple](https://support.apple.com/es-es/102390)
 
-Mientras se completa la instalación global, el proyecto incluye un runtime local en la carpeta superior `.tools/node`. Desde este directorio:
+5. Dejá el servidor del paso 4 funcionando. En la ventana de la interfaz, presioná **Ctrl+C** y volvé a iniciarla con `npm run dev -- --host 0.0.0.0`. Si Windows te pregunta por el acceso de red, habilitalo para redes privadas.
+6. Ahora abrí `https://localhost:5173` en la computadora y, en el celular, `https://192.168.1.25:5173` con tu dirección real. Si cambió el puerto, ajustalo en ambos equipos. Si cambia la dirección IP de la computadora, repetí el comando que genera los dos archivos del servidor y reiniciá la interfaz.
 
-    PATH="../.tools/node/bin:$PATH" ../.tools/node/bin/npm run dev
+### Emití, recibí y verificá una constancia
 
-La API queda disponible en el puerto 4001. No subas `data/`: ahí se almacenan SQLite y la clave privada local del emisor.
+1. **Celular:** iniciá sesión como **Estudiante · Mariano Arias Simone**, abrí **Mi billetera** y tocá **Vincular esta billetera**.
+2. **Computadora:** entrá como **Gestión Institucional · Área Académica**. En **Emisión**, seleccioná a Mariano, elegí **Materia aprobada**, escribí **Bases de Datos** y pulsá **Emitir y generar código QR**.
+3. **Celular:** tocá el botón de cámara de la app, aceptá el permiso y apuntá al QR de la computadora. La constancia debería aparecer en **Mis credenciales**.
+4. **Computadora:** elegí **Cambiar perfil**, entrá como **Docente · Marcelo Roldán**, abrí **Verificar**, pedí **Materia aprobada** y pulsá **Generar código QR de verificación**.
+5. **Celular:** escaneá el nuevo QR, revisá qué se solicita y tocá **Autorizar y compartir**. El resultado aparece en la pantalla del docente.
 
+Para practicar asistencia, abrí **Asistencia → Abrir asistencia y mostrar código QR** en el perfil docente. Escanealo desde la billetera vinculada y tocá **Confirmar mi presencia** antes de que se cumpla un minuto. En la computadora podés ver la presencia y elegir **Descargar planilla (CSV / Excel)**.
 
-## Despliegue en Railway
+## Si algo falla
 
-El Dockerfile compila React y sirve la interfaz y la API desde un único servicio Node 24. Railway termina HTTPS. La demo local conserva su lanzador HTTPS.
+| Qué ves | Qué podés hacer |
+| --- | --- |
+| `node` o `npm` no se reconoce | Cerrá y volvé a abrir la terminal después de instalar Node.js 24. |
+| `npm` no encuentra `package.json` | Entrá en la carpeta que extrajiste. Revisá que el archivo se vea en esa carpeta. |
+| La página carga, pero no podés iniciar sesión | Confirmá que `npm run server` sigue abierto. Visitá [http://localhost:4001/health](http://localhost:4001/health). Deberías ver `"ok":true`. |
+| El celular no abre la dirección | Revisá que ambos equipos estén en el mismo Wi-Fi, que la dirección y el puerto coincidan y que hayas usado el comando del paso 5 de la preparación del celular. Algunas redes de invitados bloquean la comunicación entre equipos. |
+| El navegador del celular avisa que el certificado no es de confianza | Revisá el paso de instalación del certificado en ese celular y comprobá que la IP de la dirección coincida con la que usaste al generarlo. |
+| La app no abre la cámara o el QR caducó | Permití el acceso a la cámara desde el navegador. Si el QR venció, generá otro desde el perfil que corresponde. |
 
-- Rama de despliegue: `feature/railway-deploy`.
-- Variables: `APP_MODE=cloud`, `HOST=0.0.0.0`, `DATA_DIR=/data`, `PORT=8080`.
-- Montar un volumen persistente en `/data`. Allí quedan SQLite, la clave privada ML-DSA-65, el CSV y la foto. Una sola réplica para SQLite.
-- `ACCESS_PASSWORD_HASHES`: JSON con las cuentas `teacher-marcelo`, `admin-academic`, `admin-library`, `admin-gym` y `demo-tools`. Cada valor tiene formato `salt:hash`, con salt hexadecimal de 16 bytes y hash scrypt de 32 bytes. Se comprueba la contraseña en el servidor. El servicio se niega a arrancar sin estos valores.
-- Entrada pública: `/?registro=1`, sin contraseña. Portal institucional/docente: `/?acceso=institucional`.
-- Las credenciales de acceso generadas se guardan solo en `data/railway-access.md`, excluido de Git. Las contraseñas no se incluyen en la interfaz ni en el código publicado.
-- Las sesiones duran ocho horas y se invalidan al cerrar sesión o reiniciar el servidor. Las billeteras pueden recuperar su acceso mediante su clave local.
-- Diez intentos fallidos de acceso por IP bloquean el ingreso por quince minutos.
-- En cloud, el nombre declarado no habilita fotografía ni suplanta perfiles predefinidos. La cuenta docente puede subir la foto de la clase. El registro de participantes sigue siendo una demo con nombres declarados, no autenticación oficial universitaria.
+<details>
+<summary>Detalles técnicos y documentación</summary>
 
-### Reiniciar desde asistencia
+- La interfaz usa React y Vite. El servidor usa Fastify y SQLite. La firma de las credenciales usa **ML-DSA-65**. Al arrancar se generan la base de datos y las claves locales en `data/`. Mantené fuera de Git esa carpeta y `certs/local-dev/`.
+- La app guarda las credenciales y la clave de la billetera del estudiante en IndexedDB, el almacenamiento del navegador. Para seguir usando la misma billetera, entrá desde el mismo navegador y la misma dirección.
+- `npm test` comprueba los flujos locales. `npm run build` genera la versión para desplegar. También están disponibles `npm run test:access`, `npm run test:emails` y, después de compilar, `npm run test:cloud`.
+- Para Railway, el proyecto incluye [Dockerfile](Dockerfile) y [railway.json](railway.json). El modo desplegado usa `APP_MODE=cloud`, `HOST=0.0.0.0`, `DATA_DIR=/data`, `PORT=8080` y un volumen persistente en `/data` con una réplica. `ACCESS_PASSWORD_HASHES` contiene hashes scrypt en formato `salt:hash` para `teacher-marcelo`, `admin-academic`, `admin-library`, `admin-gym` y `demo-tools`. La entrada pública es `/?registro=1` y la institucional, `/?acceso=institucional`.
+- El reinicio de la demo desde Asistencia borra las vinculaciones, credenciales, asistencias nuevas, sorteos y recuerdos. Conserva los perfiles de laboratorio, las asistencias de ejemplo y la clave institucional.
+- [Borrador de la presentación](docs/borrador-presentacion.md) · [Plan de implementación](docs/plan-implementacion.md) · [Identidad visual](docs/identidad-visual-unlar.md)
 
-El docente autenticado puede usar el botón de reinicio también en Railway. Elimina credenciales, solicitudes y entregas, asistencias, sorteos, souvenirs, la foto grupal y las vinculaciones de billeteras. Conserva los dos perfiles de laboratorio sin claves vinculadas y las asistencias de ejemplo del 13 y 20 de octubre, tanto en Railway como en modo local. Ese es el estado inicial de la demo. Regenera el CSV y cierra las sesiones de los participantes. Conserva las cuentas de acceso, la sesión docente y la clave institucional.
-
-Los datos de IndexedDB de cada teléfono no pueden borrarse a distancia. Después del reinicio, al recargar la billetera, la aplicación detecta que el registro ya no existe y permite registrarse nuevamente. La clave local puede reutilizarse.
-
-### Validación
-
-`npm test` prueba los flujos locales; `npm run test:cloud` prueba el mismo recorrido con acceso protegido y reinicio completo; `npm run test:access` comprueba hashes, expiración y cierre de sesiones.
+</details>
